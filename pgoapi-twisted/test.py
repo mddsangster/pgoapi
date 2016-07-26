@@ -87,6 +87,9 @@ class PoGoAPI(object):
         d.addCallback(oauth_cb)
         return d
 
+    def nia_cb(self, data):
+        return data
+
     def oauth_cb(self, data):
         response = gpsoauth.google.parse_auth_response(data)
         self._auth_token = response["Auth"]
@@ -98,9 +101,19 @@ class PoGoAPI(object):
         request.auth_info.token.contents = self.get_token()
         request.auth_info.token.unknown2 = 59
         request.unknown12 = 989
+
+        subrequest = request.requests.add()
+        subrequest.request_type = 2
+
         print request
-        #request = self._build_sub_requests(request, subrequests)
-        return response
+
+        d = httpRequest(API_ENTRY, request.SerializeToString(), {
+            #'Content-Type': ['application/x-www-form-urlencoded',],
+            'User-Agent': ['Niantic App']
+        }, 'POST')
+        d.addCallback(nia_cb)
+
+        return d
 
     def get_token(self):
         return self._auth_token
