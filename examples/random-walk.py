@@ -129,8 +129,8 @@ def gmaps_dbug(coords, spins, key):
         url_string += '&markers=color:blue%7C{},{}'.format(spin['latitude'], spin['longitude'])
     return url_string
 
-# def get_key_from_pokemon(pokemon):
-#     return '{}-{}'.format(pokemon['spawnpoint_id'], pokemon['pokemon_data']['pokemon_id'])
+def get_key_from_pokemon(pokemon):
+    return '{}-{}'.format(pokemon['spawn_point_id'], pokemon['pokemon_data']['pokemon_id'])
 
 def find_poi(api, lat, lng):
     spins = []
@@ -142,11 +142,18 @@ def find_poi(api, lat, lng):
     if 'status' in response_dict['responses']['GET_MAP_OBJECTS']:
         if response_dict['responses']['GET_MAP_OBJECTS']['status'] == 1:
             for map_cell in response_dict['responses']['GET_MAP_OBJECTS']['map_cells']:
-                # if 'wild_pokemons' in map_cell:
-                #     for pokemon in map_cell['wild_pokemons']:
-                #         pokekey = get_key_from_pokemon(pokemon)
-                #         pokemon['hides_at'] = time.time() + pokemon['time_till_hidden_ms']/1000
-                #         poi['pokemons'][pokekey] = pokemon
+                # if 'catchable_pokemons' in map_cell:
+                #     for pokemon in map_cell['catchable_pokemons']:
+                #         while True:
+                #             api.encounter(encounter_id = pokemon['encounter_id'], spawn_point_id = pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
+                #             enc = api.call()
+                #             print enc
+                #             api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = 1, normalized_reticle_size = 1.950, spawn_point_guid = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = 1, NormalizedHitPosition = 1)
+                #             ret = api.call()
+                #             print ret
+                #             if not (ret['responses']['CATCH_POKEMON']['status_code'] == 2 or ret['responses']['CATCH_POKEMON']['status_code'] == 4):
+                #                 print ret
+                #                 break
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
                         poi['forts'].append(fort)
@@ -156,6 +163,7 @@ def find_poi(api, lat, lng):
                                 ret = api.call()
                                 if ret["responses"]["FORT_SEARCH"]["result"] == 1:
                                     spins.append(fort)
+    # print('POI dictionary: \n\r{}'.format(pprint.PrettyPrinter(indent=4).pformat(poi)))
     return spins
 
 def main():
@@ -222,7 +230,7 @@ def main():
             m2 = random.choice([-1,1])
         last_walked = walked
 
-        r = .0001 + random.gauss(.00005, .00005)
+        r = .0002 + random.gauss(.00005, .00005)
         pmod = random.choice([0,1,2])
         if pmod==0:
             newposition = (position[0]+(r*m1), position[1], 0)
@@ -239,7 +247,9 @@ def main():
         spins += newspins
         coords.append({'lat': newposition[0], 'lng': newposition[1]})
 
+        sys.stdout.write("===================================================================================================================================\n")
         sys.stdout.write("[%f] %s: km_walked=%.1f, target_km_walked=%.1f, spins=%d, inventory=%d/%d, position=(%.5f,%.5f)\n" % (time.time()-start_time, username, walked, target_km, len(spins), inventory, player["max_item_storage"], newposition[0], newposition[1]))
+        sys.stdout.write("===================================================================================================================================\n")
 
         urllib.urlretrieve(gmaps_dbug(coords, spins, config.key), "%s.png" % username)
 
