@@ -178,7 +178,8 @@ def main():
         return
 
     api.get_player()
-    username = api.call()["responses"]["GET_PLAYER"]["player_data"]["username"]
+    player = api.call()["responses"]["GET_PLAYER"]["player_data"]
+    username = player["username"]
 
     coords = []
     spins = []
@@ -191,12 +192,18 @@ def main():
     last_walked = 0
 
     while True:
+        inventory = 0
         position = api.get_position()
         target_km = []
         api.get_inventory()
         items = api.call()["responses"]["GET_INVENTORY"]["inventory_delta"]["inventory_items"]
         walked = 0
         for item in items:
+            if "item" in item["inventory_item_data"]:
+                if "count" in item["inventory_item_data"]["item"]:
+                    inventory += item["inventory_item_data"]["item"]["count"]
+                else:
+                    inventory += 1
             if "egg_incubators" in item["inventory_item_data"]:
                 if "target_km_walked" in item["inventory_item_data"]["egg_incubators"]["egg_incubator"][0]:
                     target_km.append(item["inventory_item_data"]["egg_incubators"]["egg_incubator"][0]["target_km_walked"])
@@ -205,11 +212,8 @@ def main():
         if len(target_km) > 0:
             target_km = min(target_km)
             if walked >= target_km:
-                print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-                print "km_walked: %f, target_km_walked: %f" % (walked, target_km)
-                print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
                 api.get_hatched_eggs()
-                print api.call()
+                api.call()
         else:
             target_km = -1
 
@@ -235,9 +239,7 @@ def main():
         spins += newspins
         coords.append({'lat': newposition[0], 'lng': newposition[1]})
 
-        print "=============================================================================================================================="
-        print "elapsed: %f, km_walked: %f, target_km_walked: %f, spins: %d, position: (%f,%f)" % (time.time()-start_time, walked, target_km, len(spins), newposition[0], newposition[1])
-        print "=============================================================================================================================="
+        sys.stdout.write("[%f] %s: km_walked=%.1f, target_km_walked=%.1f, spins=%d, inventory=%d/%d, position=(%.5f,%.5f)\n" % (time.time()-start_time, username, walked, target_km, len(spins), inventory, player["max_item_storage"], newposition[0], newposition[1]))
 
         urllib.urlretrieve(gmaps_dbug(coords, spins, config.key), "%s.png" % username)
 
