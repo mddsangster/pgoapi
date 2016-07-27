@@ -103,6 +103,8 @@ def init_config():
     parser.add_argument("-p", "--password", help="Password")
     parser.add_argument("-l", "--location", help="Location", required=required("location"))
     parser.add_argument("-k", "--key", help="Google Maps API Key", required=required("key"))
+    parser.add_argument("-q", "--powerquotient", help="Minimum power quotient for keeping pokemon")
+    parser.set_defaults(powerquotient=50)
     config = parser.parse_args()
 
     # Passed in arguments shoud trump
@@ -150,29 +152,32 @@ def find_poi(api, lat, lng):
             for map_cell in response_dict['responses']['GET_MAP_OBJECTS']['map_cells']:
                 if 'catchable_pokemons' in map_cell:
                     for pokemon in map_cell['catchable_pokemons']:
-                        api.encounter(encounter_id = pokemon['encounter_id'], spawn_point_id = pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
-                        enc = api.call()
-                        if enc['responses']['ENCOUNTER']['status'] == 1:
-                            while True:
-                                normalized_reticle_size = 1.950 - random.uniform(0,.5)
-                                normalized_hit_position = 1.0# + random.uniform(0,.1)
-                                spin_modifier = 1.0 - random.uniform(0,.1)
-                                #print (normalized_reticle_size, normalized_hit_position, spin_modifier)
-                                api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = 1, normalized_reticle_size = normalized_reticle_size, spawn_point_id = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = spin_modifier, normalized_hit_position = normalized_hit_position)
-                                ret = api.call()
-                                if "status" in ret['responses']['CATCH_POKEMON']:
-                                    if ret['responses']['CATCH_POKEMON']['status'] == 1:
-                                        # print ret['responses']["CATCH_POKEMON"]
-                                        stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
-                                        candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
-                                        xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
-                                        catches.append(pokemon)
+                        if math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng) < float("inf"):# 0.0004495:
+                            api.encounter(encounter_id = pokemon['encounter_id'], spawn_point_id = pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
+                            enc = api.call()
+                            if enc['responses']['ENCOUNTER']['status'] == 1:
+                                while True:
+                                    normalized_reticle_size = 1.950 - random.uniform(0,.5)
+                                    normalized_hit_position = 1.0# + random.uniform(0,.1)
+                                    spin_modifier = 1.0 - random.uniform(0,.1)
+                                    #print (normalized_reticle_size, normalized_hit_position, spin_modifier)
+                                    api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = 1, normalized_reticle_size = normalized_reticle_size, spawn_point_id = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = spin_modifier, normalized_hit_position = normalized_hit_position)
+                                    ret = api.call()
+                                    if "status" in ret['responses']['CATCH_POKEMON']:
+                                        if ret['responses']['CATCH_POKEMON']['status'] == 1:
+                                            # print ret['responses']["CATCH_POKEMON"]
+                                            stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
+                                            candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
+                                            xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
+                                            catches.append(pokemon)
+                                            break
+                                        elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
+                                            break
+                                    else:
+                                        print math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng)
+                                        print pokemon
+                                        print ret
                                         break
-                                    elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
-                                        break
-                                else:
-                                    print ret
-                                    break
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
                         poi['forts'].append(fort)
@@ -234,7 +239,20 @@ def main():
         walked = 0
         for item in items:
             if "pokemon_data" in item["inventory_item_data"]:
-                mons += 1
+                pq = 0
+                for iv in ["individual_attack","individual_defense","individual_stamina"]:
+                    if iv in item["inventory_item_data"]["pokemon_data"]:
+                        pq += item["inventory_item_data"]["pokemon_data"][iv]
+                pq = int(round(pq/45.0,2)*100)
+                if pq < config.powerquotient:
+                    api.release_pokemon(pokemon_id = item["inventory_item_data"]["pokemon_data"]["id"])
+                    ret = api.call()
+                    if "result" in ret["responses"]["RELEASE_POKEMON"] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
+                        candy += ret["responses"]["RELEASE_POKEMON"]["candy_awarded"]
+                    else:
+                        mons += 1
+                else:
+                    mons += 1
             if "item" in item["inventory_item_data"]:
                 if "count" in item["inventory_item_data"]["item"]:
                     inventory += item["inventory_item_data"]["item"]["count"]
@@ -258,7 +276,7 @@ def main():
             m2 = random.choice([-1,1])
         last_walked = walked
 
-        r = .0002 + random.gauss(.00005, .00005)
+        r = .0001 + random.gauss(.00005, .00005)
         pmod = random.choice([0,1,2])
         if pmod==0:
             newposition = (position[0]+(r*m1), position[1], 0)
