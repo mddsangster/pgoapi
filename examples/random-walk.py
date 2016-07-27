@@ -103,8 +103,8 @@ def init_config():
     parser.add_argument("-p", "--password", help="Password")
     parser.add_argument("-l", "--location", help="Location", required=required("location"))
     parser.add_argument("-k", "--key", help="Google Maps API Key", required=required("key"))
-    parser.add_argument("-q", "--powerquotient", help="Minimum power quotient for keeping pokemon")
-    parser.set_defaults(powerquotient=50)
+    parser.add_argument("-q", "--powerquotient", type=int, help="Minimum power quotient for keeping pokemon")
+    parser.set_defaults(powerquotient=0)
     config = parser.parse_args()
 
     # Passed in arguments shoud trump
@@ -224,6 +224,8 @@ def main():
     stardust = 0
     candy = 0
     xp = 0
+    incubators_loaded = 0
+    eggs_hatched = 0
 
     m1 = random.choice([-1,1])
     m2 = random.choice([-1,1])
@@ -241,23 +243,29 @@ def main():
         items = api.call()["responses"]["GET_INVENTORY"]["inventory_delta"]["inventory_items"]
         walked = 0
         balls = []
+        eggs = []
+        incubators = []
         for item in items:
             if "pokemon_data" in item["inventory_item_data"]:
-                pq = 0
-                for iv in ["individual_attack","individual_defense","individual_stamina"]:
-                    if iv in item["inventory_item_data"]["pokemon_data"]:
-                        pq += item["inventory_item_data"]["pokemon_data"][iv]
-                pq = int(round(pq/45.0,2)*100)
-                if pq < config.powerquotient:
-                    api.release_pokemon(pokemon_id = item["inventory_item_data"]["pokemon_data"]["id"])
-                    ret = api.call()
-                    if "result" in ret["responses"]["RELEASE_POKEMON"] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
-                        candy += ret["responses"]["RELEASE_POKEMON"]["candy_awarded"]
-                        releases += 1
+                if "is_egg" in item["inventory_item_data"]["pokemon_data"]:
+                    eggs.append(item["inventory_item_data"]["pokemon_data"])
+                    mons += 1
+                else:
+                    pq = 0
+                    for iv in ["individual_attack","individual_defense","individual_stamina"]:
+                        if iv in item["inventory_item_data"]["pokemon_data"]:
+                            pq += item["inventory_item_data"]["pokemon_data"][iv]
+                    pq = int(round(pq/45.0,2)*100)
+                    if pq < config.powerquotient:
+                        api.release_pokemon(pokemon_id = item["inventory_item_data"]["pokemon_data"]["id"])
+                        ret = api.call()
+                        if "result" in ret["responses"]["RELEASE_POKEMON"] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
+                            candy += ret["responses"]["RELEASE_POKEMON"]["candy_awarded"]
+                            releases += 1
+                        else:
+                            mons += 1
                     else:
                         mons += 1
-                else:
-                    mons += 1
             if "item" in item["inventory_item_data"]:
                 for i in [1,2,3]:
                     if item["inventory_item_data"]["item"]["item_id"] == i:
@@ -270,17 +278,28 @@ def main():
                 else:
                     inventory += 1
             if "egg_incubators" in item["inventory_item_data"]:
-                if "target_km_walked" in item["inventory_item_data"]["egg_incubators"]["egg_incubator"][0]:
-                    target_km.append(item["inventory_item_data"]["egg_incubators"]["egg_incubator"][0]["target_km_walked"])
+                for ib in item["inventory_item_data"]["egg_incubators"]["egg_incubator"]:
+                    incubators.append(ib)
+                    if "target_km_walked" in ib:
+                        target_km.append(ib["target_km_walked"])
             elif "player_stats" in item["inventory_item_data"]:
                 walked = item["inventory_item_data"]["player_stats"]["km_walked"]
         if len(target_km) > 0:
             target_km = min(target_km)
             if walked >= target_km:
                 api.get_hatched_eggs()
-                api.call()
+                ret = api.call()
+                print ret
         else:
             target_km = -1
+
+        for ib in incubators:
+            if not 'pokemon_id' in ib:
+                if len(eggs) > 0:
+                    api.use_item_egg_incubator(item_id=ib['id'],pokemon_id=eggs.pop(0)['id'])
+                    ret = api.call()
+                    if "result" in ret["responses"]['USE_ITEM_EGG_INCUBATOR'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
+                        incubators_loaded += 1
 
         if last_walked != walked:
             m1 = random.choice([-1,1])
@@ -308,15 +327,20 @@ def main():
         xp += newxp
         coords.append({'lat': newposition[0], 'lng': newposition[1]})
 
+        m, s = divmod(time.time()-start_time, 60)
+        h, m = divmod(m, 60)
+
         sys.stdout.write("=========================================\n")
         sys.stdout.write(" username: %s\n" % (username))
-        sys.stdout.write(" elapsed_time: %f\n" % (time.time()-start_time))
+        sys.stdout.write(" elapsed_time: %d:%02d:%02d\n" % (h, m, s))
         sys.stdout.write(" km_walked: %.1f\n" % (walked))
         sys.stdout.write(" target_km_walked: %.1f\n" % (target_km))
         sys.stdout.write(" spins: %d\n" % (len(spins)))
         sys.stdout.write(" inventory: %d/%d\n" % (inventory, player["max_item_storage"]))
         sys.stdout.write(" catches: %d\n" % len(catches))
         sys.stdout.write(" releases: %d\n" % releases)
+        sys.stdout.write(" incubators_loaded: %d\n" % incubators_loaded)
+        sys.stdout.write(" eggs_hatched: %d\n" % eggs_hatched)
         sys.stdout.write(" pokemon: %d/%d\n" % (mons, player["max_pokemon_storage"]))
         sys.stdout.write(" stardust: %d\n" % (stardust))
         sys.stdout.write(" candy: %d\n" % (candy))
