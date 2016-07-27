@@ -151,7 +151,7 @@ def find_poi(api, lat, lng):
                         enc = api.call()
                         if enc['responses']['ENCOUNTER']['status'] == 1:
                             while True:
-                                api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = 1, normalized_reticle_size = 1.950, spawn_point_id = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = 1, normalized_hit_position = 1)
+                                api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = 1, normalized_reticle_size = (1.950-random.uniform(0,.5)), spawn_point_id = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = 1, normalized_hit_position = (1-random.uniform(0,.1)))
                                 ret = api.call()
                                 if ret['responses']['CATCH_POKEMON']['status'] == 1:
                                     catches.append(pokemon)
