@@ -136,7 +136,7 @@ def gmaps_dbug(coords, spins, catches, key):
 def get_key_from_pokemon(pokemon):
     return '{}-{}'.format(pokemon['spawn_point_id'], pokemon['pokemon_data']['pokemon_id'])
 
-def find_poi(api, lat, lng):
+def find_poi(api, lat, lng, balls):
     spins = []
     catches = []
     stardust = 0
@@ -157,15 +157,17 @@ def find_poi(api, lat, lng):
                             enc = api.call()
                             if enc['responses']['ENCOUNTER']['status'] == 1:
                                 while True:
+                                    if len(balls) == 0:
+                                        break
                                     normalized_reticle_size = 1.950 - random.uniform(0,.5)
                                     normalized_hit_position = 1.0# + random.uniform(0,.1)
                                     spin_modifier = 1.0 - random.uniform(0,.1)
                                     #print (normalized_reticle_size, normalized_hit_position, spin_modifier)
-                                    api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = 1, normalized_reticle_size = normalized_reticle_size, spawn_point_id = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = spin_modifier, normalized_hit_position = normalized_hit_position)
+                                    api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = balls.pop(0), normalized_reticle_size = normalized_reticle_size, spawn_point_id = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = spin_modifier, normalized_hit_position = normalized_hit_position)
                                     ret = api.call()
                                     if "status" in ret['responses']['CATCH_POKEMON']:
                                         if ret['responses']['CATCH_POKEMON']['status'] == 1:
-                                            # print ret['responses']["CATCH_POKEMON"]
+                                            print "CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng),normalized_reticle_size,spin_modifier)
                                             stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
                                             candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
                                             xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
@@ -174,9 +176,9 @@ def find_poi(api, lat, lng):
                                         elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
                                             break
                                     else:
-                                        print math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng)
-                                        print pokemon
-                                        print ret
+                                        print "CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng),normalized_reticle_size,spin_modifier)
+                                        #print pokemon
+                                        #print ret
                                         break
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
@@ -218,6 +220,7 @@ def main():
     coords = []
     spins = []
     catches = []
+    releases = 0
     stardust = 0
     candy = 0
     xp = 0
@@ -237,6 +240,7 @@ def main():
         api.get_inventory()
         items = api.call()["responses"]["GET_INVENTORY"]["inventory_delta"]["inventory_items"]
         walked = 0
+        balls = []
         for item in items:
             if "pokemon_data" in item["inventory_item_data"]:
                 pq = 0
@@ -249,11 +253,18 @@ def main():
                     ret = api.call()
                     if "result" in ret["responses"]["RELEASE_POKEMON"] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
                         candy += ret["responses"]["RELEASE_POKEMON"]["candy_awarded"]
+                        releases += 1
                     else:
                         mons += 1
                 else:
                     mons += 1
             if "item" in item["inventory_item_data"]:
+                for i in [1,2,3]:
+                    if item["inventory_item_data"]["item"]["item_id"] == i:
+                        if "count" in item["inventory_item_data"]["item"]:
+                            balls += [i]*item["inventory_item_data"]["item"]["count"]
+                        else:
+                            balls += [i]
                 if "count" in item["inventory_item_data"]["item"]:
                     inventory += item["inventory_item_data"]["item"]["count"]
                 else:
@@ -276,7 +287,7 @@ def main():
             m2 = random.choice([-1,1])
         last_walked = walked
 
-        r = .0001 + random.gauss(.00005, .00005)
+        r = .0002 + random.gauss(.00005, .00005)
         pmod = random.choice([0,1,2])
         if pmod==0:
             newposition = (position[0]+(r*m1), position[1], 0)
@@ -289,7 +300,7 @@ def main():
         api.player_update(latitude = util.f2i(newposition[0]), longitude = util.f2i(newposition[1]))
         api.call()
 
-        newspins, newcatches, newstardust, newcandy, newxp = find_poi(api, newposition[0], newposition[1])
+        newspins, newcatches, newstardust, newcandy, newxp = find_poi(api, newposition[0], newposition[1], sorted(balls))
         spins += newspins
         catches += newcatches
         stardust += newstardust
@@ -305,6 +316,7 @@ def main():
         sys.stdout.write(" spins: %d\n" % (len(spins)))
         sys.stdout.write(" inventory: %d/%d\n" % (inventory, player["max_item_storage"]))
         sys.stdout.write(" catches: %d\n" % len(catches))
+        sys.stdout.write(" releases: %d\n" % releases)
         sys.stdout.write(" pokemon: %d/%d\n" % (mons, player["max_pokemon_storage"]))
         sys.stdout.write(" stardust: %d\n" % (stardust))
         sys.stdout.write(" candy: %d\n" % (candy))
