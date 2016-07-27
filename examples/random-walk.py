@@ -76,7 +76,7 @@ class Map(object):
                 strokeOpacity: 1.0,
                 strokeWeight: 4}});
             walkPath.setMap(map);
-        """.format(path=",".join(["{lat: %f, lng: %f}" % (p[0], p[1]) for p in self._positions]))
+        """.format(path=",".join(["new google.maps.LatLng(%f,%f)" % (p[0], p[1]) for p in self._positions]))
         markersCode = "\n".join(
             ["""var marker = new google.maps.Marker({{
                 position: {{lat: {lat}, lng: {lon}}},
@@ -96,6 +96,12 @@ class Map(object):
                     }});
                     {pathCode}
                     {markersCode}
+                    var bounds = new google.maps.LatLngBounds();
+                    var arrayLength = walkPathCoords.length;
+                    for (var i = 0; i < arrayLength; i++) {{
+                        bounds.extend(walkPathCoords[i]);
+                    }}
+                    map.fitBounds(bounds);
                 }}
                 google.maps.event.addDomListener(window, 'load', show_map);
             </script>
