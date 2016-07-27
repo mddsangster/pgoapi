@@ -24,6 +24,8 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 Author: tjado <https://github.com/tejado>
 """
 
+from __future__ import print_function
+
 import os
 import re
 import sys
@@ -32,8 +34,8 @@ import time
 import struct
 import pprint
 import logging
-import requests
 import argparse
+import requests
 import getpass
 import random
 import urllib
@@ -41,7 +43,7 @@ import math
 import datetime
 
 # add directory of this file to PATH, so that the package will be found
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)),".."))
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
 # import Pokemon Go API lib
 from pgoapi import pgoapi
@@ -54,6 +56,53 @@ from s2sphere import Cell, CellId, LatLng
 
 log = logging.getLogger(__name__)
 
+class Map(object):
+    def __init__(self):
+        self._points = []
+        self._positions = []
+    def add_point(self, coordinates, color="#FF0000"):
+        self._points.append((coordinates, color))
+    def add_position(self, coordinates):
+        self._positions.append(coordinates)
+    def __str__(self):
+        centerLat = sum((x[0] for x in self._positions)) / len(self._positions)
+        centerLon = sum((x[1] for x in self._positions)) / len(self._positions)
+        pathCode = """
+            var walkPathCoords = [{path}];
+            var walkPath = new google.maps.Polyline({{
+                path: walkPathCoords,
+                geodesic: true,
+                strokeColor: '#7F00FF',
+                strokeOpacity: 1.0,
+                strokeWeight: 4}});
+            walkPath.setMap(map);
+        """.format(path=",".join(["{lat: %f, lng: %f}" % (p[0], p[1]) for p in self._positions]))
+        markersCode = "\n".join(
+            ["""var marker = new google.maps.Marker({{
+                position: {{lat: {lat}, lng: {lon}}},
+                map: map
+                }});
+                marker.setIcon('{icon}');""".format(lat=x[0][0], lon=x[0][1], icon=x[1]) for x in self._points
+            ])
+        return """
+            <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
+            <div id="map-canvas" style="height: 100%; width: 100%"></div>
+            <script type="text/javascript">
+                var map;
+                function show_map() {{
+                    map = new google.maps.Map(document.getElementById("map-canvas"), {{
+                        zoom: 16,
+                        center: new google.maps.LatLng({centerLat}, {centerLon})
+                    }});
+                    {pathCode}
+                    {markersCode}
+                }}
+                google.maps.event.addDomListener(window, 'load', show_map);
+            </script>
+        """.format(centerLat=centerLat, centerLon=centerLon,
+                   pathCode=pathCode,
+                   markersCode=markersCode)
+
 def get_pos_by_name(location_name):
     geolocator = GoogleV3()
     loc = geolocator.geocode(location_name, timeout=10)
@@ -64,14 +113,14 @@ def get_pos_by_name(location_name):
 
     return (loc.latitude, loc.longitude, loc.altitude)
 
-def get_cell_ids(lat, long, radius = 10):
-    origin = CellId.from_lat_lng(LatLng.from_degrees(lat, long)).parent(15)
+def get_cell_ids(lat, lng, radius=10):
+    origin = CellId.from_lat_lng(LatLng.from_degrees(lat, lng)).parent(15)
     walk = [origin.id()]
     right = origin.next()
     left = origin.prev()
 
     # Search around provided radius
-    for i in range(radius):
+    for _ in range(radius):
         walk.append(right.id())
         walk.append(left.id())
         right = right.next()
@@ -90,7 +139,7 @@ def init_config():
     config_file = "config.json"
 
     # If config file exists, load variables from json
-    load   = {}
+    load = {}
     if os.path.isfile(config_file):
         with open(config_file) as data:
             load.update(json.load(data))
@@ -117,21 +166,10 @@ def init_config():
         config.__dict__["password"] = getpass.getpass()
 
     if config.auth_service not in ['ptc', 'google']:
-      log.error("Invalid Auth service specified! ('ptc' or 'google')")
-      return None
+        log.error("Invalid Auth service specified! ('ptc' or 'google')")
+        return None
 
     return config
-
-def gmaps_dbug(coords, spins, catches, key):
-    url_string = 'http://maps.googleapis.com/maps/api/staticmap?key=%s&size=800x800&path=' % (key)
-    for coord in coords:
-        url_string += '{},{}|'.format(coord['lat'], coord['lng'])
-    url_string = url_string[:-1]
-    for spin in spins:
-        url_string += '&markers=color:blue%7C{},{}'.format(spin['latitude'], spin['longitude'])
-    for catch in catches:
-        url_string += '&markers=color:green%7C{},{}'.format(catch['latitude'], catch['longitude'])
-    return url_string
 
 def get_key_from_pokemon(pokemon):
     return '{}-{}'.format(pokemon['spawn_point_id'], pokemon['pokemon_data']['pokemon_id'])
@@ -145,7 +183,7 @@ def find_poi(api, lat, lng, balls):
     poi = {'pokemons': {}, 'forts': []}
     cell_ids = get_cell_ids(lat, lng)
     timestamps = [0,] * len(cell_ids)
-    api.get_map_objects(latitude = lat, longitude = lng, since_timestamp_ms = timestamps, cell_id = cell_ids)
+    api.get_map_objects(latitude=lat, longitude=lng, since_timestamp_ms=timestamps, cell_id=cell_ids)
     response_dict = api.call()
     if 'status' in response_dict['responses']['GET_MAP_OBJECTS']:
         if response_dict['responses']['GET_MAP_OBJECTS']['status'] == 1:
@@ -153,7 +191,7 @@ def find_poi(api, lat, lng, balls):
                 if 'catchable_pokemons' in map_cell:
                     for pokemon in map_cell['catchable_pokemons']:
                         if math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng) < float("inf"):# 0.0004495:
-                            api.encounter(encounter_id = pokemon['encounter_id'], spawn_point_id = pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
+                            api.encounter(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
                             enc = api.call()
                             if enc['responses']['ENCOUNTER']['status'] == 1:
                                 while True:
@@ -163,11 +201,11 @@ def find_poi(api, lat, lng, balls):
                                     normalized_hit_position = 1.0# + random.uniform(0,.1)
                                     spin_modifier = 1.0 - random.uniform(0,.1)
                                     #print (normalized_reticle_size, normalized_hit_position, spin_modifier)
-                                    api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = balls.pop(0), normalized_reticle_size = normalized_reticle_size, spawn_point_id = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = spin_modifier, normalized_hit_position = normalized_hit_position)
+                                    api.catch_pokemon(encounter_id=pokemon['encounter_id'], pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, spawn_point_id = pokemon['spawn_point_id'], hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
                                     ret = api.call()
                                     if "status" in ret['responses']['CATCH_POKEMON']:
                                         if ret['responses']['CATCH_POKEMON']['status'] == 1:
-                                            print "CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng),normalized_reticle_size,spin_modifier)
+                                            print("CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng), normalized_reticle_size, spin_modifier))
                                             stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
                                             candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
                                             xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
@@ -176,7 +214,7 @@ def find_poi(api, lat, lng, balls):
                                         elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
                                             break
                                     else:
-                                        print "CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng),normalized_reticle_size,spin_modifier)
+                                        print("CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng), normalized_reticle_size, spin_modifier))
                                         #print pokemon
                                         #print ret
                                         break
@@ -185,7 +223,7 @@ def find_poi(api, lat, lng, balls):
                         poi['forts'].append(fort)
                         if "type" in fort and fort["type"] == 1 and not "cooldown_complete_timestamp_ms" in fort:
                             if math.hypot(fort['latitude'] - lat, fort['longitude'] - lng) < 0.0004495:
-                                api.fort_search(fort_id = fort['id'], fort_latitude = fort['latitude'], fort_longitude = fort['longitude'], player_latitude=lat, player_longitude=lng)
+                                api.fort_search(fort_id=fort['id'], fort_latitude=fort['latitude'], fort_longitude=fort['longitude'], player_latitude=lat, player_longitude=lng)
                                 ret = api.call()
                                 if ret["responses"]["FORT_SEARCH"]["result"] == 1:
                                     # print ret["responses"]["FORT_SEARCH"]
@@ -252,12 +290,12 @@ def main():
                     mons += 1
                 else:
                     pq = 0
-                    for iv in ["individual_attack","individual_defense","individual_stamina"]:
+                    for iv in ["individual_attack", "individual_defense", "individual_stamina"]:
                         if iv in item["inventory_item_data"]["pokemon_data"]:
                             pq += item["inventory_item_data"]["pokemon_data"][iv]
                     pq = int(round(pq/45.0,2)*100)
                     if pq < config.powerquotient:
-                        api.release_pokemon(pokemon_id = item["inventory_item_data"]["pokemon_data"]["id"])
+                        api.release_pokemon(pokemon_id=item["inventory_item_data"]["pokemon_data"]["id"])
                         ret = api.call()
                         if "result" in ret["responses"]["RELEASE_POKEMON"] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
                             candy += ret["responses"]["RELEASE_POKEMON"]["candy_awarded"]
@@ -289,7 +327,7 @@ def main():
             if walked >= target_km:
                 api.get_hatched_eggs()
                 ret = api.call()
-                print ret
+                print(ret)
         else:
             target_km = -1
 
@@ -349,7 +387,15 @@ def main():
         sys.stdout.write("=========================================\n")
         sys.stdout.flush()
 
-        urllib.urlretrieve(gmaps_dbug(coords, spins, catches, config.key), "%s.png" % username)
+        map = Map()
+        for coord in coords:
+            map.add_position((coord['lat'], coord['lng']))
+        for spin in spins:
+            map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue-dot.png")
+        for catch in catches:
+            map.add_point((catch['latitude'], catch['longitude']), "http://maps.google.com/mapfiles/ms/icons/green-dot.png")
+        with open("%s.html" % username, "w") as out:
+            print(map, file=out)
 
         time.sleep(5)
 
