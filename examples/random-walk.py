@@ -226,8 +226,8 @@ def find_poi(api, lat, lng, balls):
                                 api.fort_search(fort_id=fort['id'], fort_latitude=fort['latitude'], fort_longitude=fort['longitude'], player_latitude=lat, player_longitude=lng)
                                 ret = api.call()
                                 if ret["responses"]["FORT_SEARCH"]["result"] == 1:
-                                    # print ret["responses"]["FORT_SEARCH"]
-                                    xp += ret["responses"]["FORT_SEARCH"]['experience_awarded']
+                                    if 'experience_awarded' in ret["responses"]["FORT_SEARCH"]:
+                                        xp += ret["responses"]["FORT_SEARCH"]['experience_awarded']
                                     spins.append(fort)
     # print('POI dictionary: \n\r{}'.format(pprint.PrettyPrinter(indent=4).pformat(poi)))
     return spins, catches, stardust, candy, xp
