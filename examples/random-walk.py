@@ -120,13 +120,15 @@ def init_config():
 
     return config
 
-def gmaps_dbug(coords, spins, key):
+def gmaps_dbug(coords, spins, catches, key):
     url_string = 'http://maps.googleapis.com/maps/api/staticmap?key=%s&size=800x800&path=' % (key)
     for coord in coords:
         url_string += '{},{}|'.format(coord['lat'], coord['lng'])
     url_string = url_string[:-1]
     for spin in spins:
         url_string += '&markers=color:blue%7C{},{}'.format(spin['latitude'], spin['longitude'])
+    for catch in catches:
+        url_string += '&markers=color:green%7C{},{}'.format(catch['latitude'], catch['longitude'])
     return url_string
 
 def get_key_from_pokemon(pokemon):
@@ -259,7 +261,7 @@ def main():
         sys.stdout.write("=========================================\n")
         sys.stdout.flush()
 
-        urllib.urlretrieve(gmaps_dbug(coords, spins, config.key), "%s.png" % username)
+        urllib.urlretrieve(gmaps_dbug(coords, spins, catches, config.key), "%s.png" % username)
 
         time.sleep(5)
 
