@@ -134,26 +134,28 @@ def get_key_from_pokemon(pokemon):
 
 def find_poi(api, lat, lng):
     spins = []
+    catches = []
     poi = {'pokemons': {}, 'forts': []}
     cell_ids = get_cell_ids(lat, lng)
     timestamps = [0,] * len(cell_ids)
-    api.get_map_objects(latitude = util.f2i(lat), longitude = util.f2i(lng), since_timestamp_ms = timestamps, cell_id = cell_ids)
+    api.get_map_objects(latitude = lat, longitude = lng, since_timestamp_ms = timestamps, cell_id = cell_ids)
     response_dict = api.call()
     if 'status' in response_dict['responses']['GET_MAP_OBJECTS']:
         if response_dict['responses']['GET_MAP_OBJECTS']['status'] == 1:
             for map_cell in response_dict['responses']['GET_MAP_OBJECTS']['map_cells']:
-                # if 'catchable_pokemons' in map_cell:
-                #     for pokemon in map_cell['catchable_pokemons']:
-                #         while True:
-                #             api.encounter(encounter_id = pokemon['encounter_id'], spawn_point_id = pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
-                #             enc = api.call()
-                #             print enc
-                #             api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = 1, normalized_reticle_size = 1.950, spawn_point_guid = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = 1, NormalizedHitPosition = 1)
-                #             ret = api.call()
-                #             print ret
-                #             if not (ret['responses']['CATCH_POKEMON']['status_code'] == 2 or ret['responses']['CATCH_POKEMON']['status_code'] == 4):
-                #                 print ret
-                #                 break
+                if 'catchable_pokemons' in map_cell:
+                    for pokemon in map_cell['catchable_pokemons']:
+                        api.encounter(encounter_id = pokemon['encounter_id'], spawn_point_id = pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
+                        enc = api.call()
+                        if enc['responses']['ENCOUNTER']['status'] == 1:
+                            while True:
+                                api.catch_pokemon(encounter_id = pokemon['encounter_id'], pokeball = 1, normalized_reticle_size = 1.950, spawn_point_id = pokemon['spawn_point_id'], hit_pokemon = True, spin_modifier = 1, normalized_hit_position = 1)
+                                ret = api.call()
+                                if ret['responses']['CATCH_POKEMON']['status'] == 1:
+                                    catches.append(pokemon)
+                                    break
+                                elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
+                                    break
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
                         poi['forts'].append(fort)
@@ -164,7 +166,7 @@ def find_poi(api, lat, lng):
                                 if ret["responses"]["FORT_SEARCH"]["result"] == 1:
                                     spins.append(fort)
     # print('POI dictionary: \n\r{}'.format(pprint.PrettyPrinter(indent=4).pformat(poi)))
-    return spins
+    return spins, catches
 
 def main():
     config = init_config()
@@ -191,6 +193,7 @@ def main():
 
     coords = []
     spins = []
+    catches = []
 
     m1 = random.choice([-1,1])
     m2 = random.choice([-1,1])
@@ -201,12 +204,15 @@ def main():
 
     while True:
         inventory = 0
+        mons = 0
         position = api.get_position()
         target_km = []
         api.get_inventory()
         items = api.call()["responses"]["GET_INVENTORY"]["inventory_delta"]["inventory_items"]
         walked = 0
         for item in items:
+            if "pokemon_data" in item["inventory_item_data"]:
+                mons += 1
             if "item" in item["inventory_item_data"]:
                 if "count" in item["inventory_item_data"]["item"]:
                     inventory += item["inventory_item_data"]["item"]["count"]
@@ -243,13 +249,15 @@ def main():
         api.player_update(latitude = util.f2i(newposition[0]), longitude = util.f2i(newposition[1]))
         api.call()
 
-        newspins = find_poi(api, newposition[0], newposition[1])
+        newspins, newcatches = find_poi(api, newposition[0], newposition[1])
         spins += newspins
+        catches += newcatches
         coords.append({'lat': newposition[0], 'lng': newposition[1]})
 
-        sys.stdout.write("===================================================================================================================================\n")
-        sys.stdout.write("[%f] %s: km_walked=%.1f, target_km_walked=%.1f, spins=%d, inventory=%d/%d, position=(%.5f,%.5f)\n" % (time.time()-start_time, username, walked, target_km, len(spins), inventory, player["max_item_storage"], newposition[0], newposition[1]))
-        sys.stdout.write("===================================================================================================================================\n")
+        sys.stdout.write("=========================================\n")
+        sys.stdout.write(" username: %s\n elapsed_time: %f\n km_walked: %.1f\n target_km_walked: %.1f\n spins: %d\n inventory: %d/%d\n catches: %d\n pokemon: %d/%d\n position: (%.5f,%.5f)\n" % (username, time.time()-start_time, walked, target_km, len(spins), inventory, player["max_item_storage"], len(catches), mons, player["max_pokemon_storage"], newposition[0], newposition[1]))
+        sys.stdout.write("=========================================\n")
+        sys.stdout.flush()
 
         urllib.urlretrieve(gmaps_dbug(coords, spins, config.key), "%s.png" % username)
 
