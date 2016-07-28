@@ -73,7 +73,7 @@ class Map(object):
                 path: walkPathCoords,
                 geodesic: true,
                 strokeColor: '#7F00FF',
-                strokeOpacity: 1.0,
+                strokeOpacity: 0.5,
                 strokeWeight: 4}});
             walkPath.setMap(map);
         """.format(path=",".join(["new google.maps.LatLng(%f,%f)" % (p[0], p[1]) for p in self._positions]))
@@ -350,7 +350,7 @@ def main():
             m2 = random.choice([-1,1])
         last_walked = walked
 
-        r = .0002 + random.gauss(.00005, .00005)
+        r = .00015 + random.gauss(.00005, .00005)
         pmod = random.choice([0,1,2])
         if pmod==0:
             newposition = (position[0]+(r*m1), position[1], 0)
