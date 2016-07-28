@@ -271,8 +271,7 @@ def main():
     incubators_loaded = 0
     eggs_hatched = 0
 
-    m1 = random.choice([-1,1])
-    m2 = random.choice([-1,1])
+    ang = random.uniform(0,360)
 
     start_time = time.time()
 
@@ -333,7 +332,11 @@ def main():
             if walked >= target_km:
                 api.get_hatched_eggs()
                 ret = api.call()
-                print(ret)
+                if "result" in ret["responses"]['GET_HATCHED_EGGS'] and ret["responses"]['GET_HATCHED_EGGS']["result"] == 1:
+                    stardust += sum(ret['responses']["GET_HATCHED_EGGS"]["stardust_awarded"])
+                    candy += sum(ret['responses']["GET_HATCHED_EGGS"]["candy_awarded"])
+                    xp += sum(ret['responses']["GET_HATCHED_EGGS"]["experience_awarded"])
+                    eggs_hatched += 1
         else:
             target_km = -1
 
@@ -346,18 +349,12 @@ def main():
                         incubators_loaded += 1
 
         if last_walked != walked:
-            m1 = random.choice([-1,1])
-            m2 = random.choice([-1,1])
+            ang = random.uniform(0,360)
         last_walked = walked
 
         r = .00015 + random.gauss(.00005, .00005)
-        pmod = random.choice([0,1,2])
-        if pmod==0:
-            newposition = (position[0]+(r*m1), position[1], 0)
-        elif pmod==1:
-            newposition = (position[0], position[1]+(r*m2), 0)
-        elif pmod==2:
-            newposition = (position[0]+(r*m1), position[1]+(r*m2), 0)
+        angtmp = ang + random.gauss(0,.25)
+        newposition = (position[0]+math.cos(angtmp)*r, position[1]+math.sin(angtmp)*r, 0)
 
         api.set_position(*newposition)
         api.player_update(latitude = util.f2i(newposition[0]), longitude = util.f2i(newposition[1]))
