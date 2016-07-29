@@ -198,15 +198,8 @@ def find_poi(api, lat, lng, balls):
     if 'status' in response_dict['responses']['GET_MAP_OBJECTS']:
         if response_dict['responses']['GET_MAP_OBJECTS']['status'] == 1:
             for map_cell in response_dict['responses']['GET_MAP_OBJECTS']['map_cells']:
-                cpl = 0
-                wpl = 0
-                if 'catchable_pokemons' in map_cell:
-                    cpl = len(map_cell['catchable_pokemons'])
                 if 'wild_pokemons' in map_cell:
-                    wpl = len(map_cell['wild_pokemons'])
-                if 'catchable_pokemons' in map_cell:
-                    print((cpl,wpl))
-                    for pokemon in map_cell['catchable_pokemons']:
+                    for pokemon in map_cell['wild_pokemons']:
                         if math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng) < float("inf"):# 0.0004495:
                             while True:
                                 api.encounter(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
