@@ -83,7 +83,7 @@ class Map(object):
                         position: {{lat: {lat}, lng: {lng}}},
                         map: map
                         }});
-                        marker.setIcon('http://maps.google.com/mapfiles/ms/icons/purple-dot.png');""".format(lat=self._player[0], lng=self._player[1])
+                        marker.setIcon('http://maps.google.com/mapfiles/ms/icons/purple.png');""".format(lat=self._player[0], lng=self._player[1])
         return """
             <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
             <div id="map-canvas" style="height: 100%; width: 100%"></div>
@@ -95,8 +95,8 @@ class Map(object):
                         center: new google.maps.LatLng({centerLat}, {centerLon})
                     }});
                     {pathCode}
-                    {playerCode}
                     {markersCode}
+                    {playerCode}
                     var bounds = new google.maps.LatLngBounds();
                     var arrayLength = walkPathCoords.length;
                     for (var i = 0; i < arrayLength; i++) {{
@@ -184,6 +184,7 @@ def get_key_from_pokemon(pokemon):
 def find_poi(api, lat, lng, balls, slept):
     spins = []
     catches = []
+    incense_catches = []
     stardust = 0
     candy = 0
     xp = 0
@@ -251,7 +252,7 @@ def find_poi(api, lat, lng, balls, slept):
                                         xp += ret["responses"]["FORT_SEARCH"]['experience_awarded']
                                     spins.append(fort)
     # print('POI dictionary: \n\r{}'.format(pprint.PrettyPrinter(indent=4).pformat(poi)))
-    return spins, catches, stardust, candy, xp, slept
+    return spins, catches, incense_catches, stardust, candy, xp, slept
 
 def main():
 
@@ -296,7 +297,7 @@ def main():
     xp = 0
     incubators_loaded = 0
     eggs_hatched = 0
-    incense_catches = 0
+    incense_catches = []
 
     ang = random.uniform(0,360)
 
@@ -377,8 +378,8 @@ def main():
                     else:
                         ri = 1
                     while True:
-                        time.sleep(0.25)
-                        slept += 0.25
+                        time.sleep(0.3)
+                        slept += 0.3
                         ret = api.recycle_inventory_item(item_id=item["inventory_item_data"]["item"]["item_id"], count=ri)
                         if "RECYCLE_INVENTORY_ITEM" in ret['responses']:
                             break
@@ -453,8 +454,7 @@ def main():
                         stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
                         candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
                         xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
-                        catches.append(pokemon)
-                        incense_catches += 1
+                        incense_catches.append(pokemon)
                         break
                     elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
                         break
@@ -462,9 +462,10 @@ def main():
                     print("INCENSE_CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
                     break
 
-        newspins, newcatches, newstardust, newcandy, newxp, slept = find_poi(api, position[0], position[1], sorted(balls), slept)
+        newspins, newcatches, newincensecatches, newstardust, newcandy, newxp, slept = find_poi(api, position[0], position[1], sorted(balls), slept)
         spins += newspins
         catches += newcatches
+        incense_catches += newincensecatches
         stardust += newstardust
         candy += newcandy
         xp += newxp
@@ -487,8 +488,8 @@ def main():
             "target_km_walked": "%.1f" % target_km,
             "spins": "%d" % len(spins),
             "recycled_items": "%d" % recycled_items,
-            "total_catches": "%d" % len(catches),
-            "incense_catches": "%d" % incense_catches,
+            "total_catches": "%d" % (len(catches)+len(incense_catches)),
+            "incense_catches": "%d" % len(incense_catches),
             "releases": "%d" % releases,
             "incubators_loaded": "%d" % incubators_loaded,
             "eggs_hatched": "%d" % eggs_hatched,
@@ -509,10 +510,13 @@ def main():
         map._player = position
         for coord in coords:
             map.add_position((coord['lat'], coord['lng']))
-        for spin in spins:
-            map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue-dot.png")
         for catch in catches:
-            map.add_point((catch['latitude'], catch['longitude']), "http://maps.google.com/mapfiles/ms/icons/green-dot.png")
+            map.add_point((catch['latitude'], catch['longitude']), "http://pokeapi.co/media/sprites/pokemon/%d.png" % catch["pokemon_data"]["pokemon_id"])
+        for incense_catche in incense_catches:
+            map.add_point((incense_catche['latitude'], incense_catche['longitude']), "http://pokeapi.co/media/sprites/pokemon/%d.png" % catch["pokemon_data"]["pokemon_id"])
+        for spin in spins:
+            map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
+
         with open("%s.html" % username, "w") as out:
             print(map, file=out)
 
