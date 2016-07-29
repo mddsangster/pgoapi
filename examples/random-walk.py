@@ -191,8 +191,8 @@ def find_poi(api, lat, lng, balls, slept):
     cell_ids = get_cell_ids(lat, lng)
     timestamps = [0,] * len(cell_ids)
     while True:
-        (0.2)
-        slept += 0.2
+        time.sleep(0.25)
+        slept += 0.25
         response_dict = api.get_map_objects(latitude=lat, longitude=lng, since_timestamp_ms=timestamps, cell_id=cell_ids)
         if "GET_MAP_OBJECTS" in response_dict['responses']:
             break
@@ -203,8 +203,8 @@ def find_poi(api, lat, lng, balls, slept):
                     for pokemon in map_cell['wild_pokemons']:
                         if math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng) < float("inf"):# 0.0004495:
                             while True:
-                                time.sleep(0.2)
-                                slept += 0.2
+                                time.sleep(0.25)
+                                slept += 0.25
                                 enc = api.encounter(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
                                 if "ENCOUNTER" in enc['responses']:
                                     break
@@ -217,8 +217,8 @@ def find_poi(api, lat, lng, balls, slept):
                                     spin_modifier = 1.0 - random.uniform(0, .1)
                                     #print (normalized_reticle_size, normalized_hit_position, spin_modifier)
                                     while True:
-                                        time.sleep(0.2)
-                                        slept += 0.2
+                                        time.sleep(0.25)
+                                        slept += 0.25
                                         ret = api.catch_pokemon(encounter_id=pokemon['encounter_id'], spawn_point_id = pokemon['spawn_point_id'], pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
                                         if "CATCH_POKEMON" in ret['responses']:
                                             break
@@ -247,8 +247,8 @@ def find_poi(api, lat, lng, balls, slept):
                         if "type" in fort and fort["type"] == 1 and not "cooldown_complete_timestamp_ms" in fort:
                             if math.hypot(fort['latitude'] - lat, fort['longitude'] - lng) < 0.0004495:
                                 while True:
-                                    time.sleep(0.2)
-                                    slept += 0.2
+                                    time.sleep(0.25)
+                                    slept += 0.25
                                     ret = api.fort_search(fort_id=fort['id'], fort_latitude=fort['latitude'], fort_longitude=fort['longitude'], player_latitude=lat, player_longitude=lng)
                                     if "FORT_SEARCH" in ret['responses']:
                                         break
@@ -315,8 +315,8 @@ def main():
     while True:
         slept = 0
         while True:
-            time.sleep(0.2)
-            slept += 0.2
+            time.sleep(0.25)
+            slept += 0.25
             ret = api.get_player()
             if "GET_PLAYER" in ret['responses']:
                 player = ret["responses"]["GET_PLAYER"]["player_data"]
@@ -331,8 +331,8 @@ def main():
         position = api.get_position()
         target_km = []
         while True:
-            time.sleep(0.2)
-            slept += 0.2
+            time.sleep(0.25)
+            slept += 0.25
             ret = api.get_inventory()
             if "GET_INVENTORY" in ret['responses']:
                 items = ret["responses"]["GET_INVENTORY"]["inventory_delta"]["inventory_items"]
@@ -354,8 +354,8 @@ def main():
                     pq = int(round(pq/45.0,2)*100)
                     if pq < config.powerquotient:
                         while True:
-                            time.sleep(0.2)
-                            slept += 0.2
+                            time.sleep(0.25)
+                            slept += 0.25
                             ret = api.release_pokemon(pokemon_id=item["inventory_item_data"]["pokemon_data"]["id"])
                             if "RELEASE_POKEMON" in ret['responses']:
                                 break
@@ -382,8 +382,8 @@ def main():
                     else:
                         ri = 1
                     while True:
-                        time.sleep(0.2)
-                        slept += 0.2
+                        time.sleep(0.25)
+                        slept += 0.25
                         ret = api.recycle_inventory_item(item_id=item["inventory_item_data"]["item"]["item_id"], count=ri)
                         if "RECYCLE_INVENTORY_ITEM" in ret['responses']:
                             break
@@ -403,12 +403,11 @@ def main():
             target_km = min(target_km)
             if walked >= target_km:
                 while True:
-                    time.sleep(0.2)
-                    slept += 0.2
+                    time.sleep(0.25)
+                    slept += 0.25
                     ret = api.get_hatched_eggs()
                     if "GET_HATCHED_EGGS" in ret['responses']:
                         break
-                print(ret)
                 if "success" in ret['responses']['GET_HATCHED_EGGS'] and ret["responses"]['GET_HATCHED_EGGS']["success"]:
                     stardust += sum(ret['responses']["GET_HATCHED_EGGS"]["stardust_awarded"])
                     candy += sum(ret['responses']["GET_HATCHED_EGGS"]["candy_awarded"])
@@ -421,60 +420,70 @@ def main():
             if not 'pokemon_id' in ib:
                 if len(eggs) > 0:
                     while True:
-                        time.sleep(0.2)
-                        slept += 0.2
+                        time.sleep(0.25)
+                        slept += 0.25
                         ret = api.use_item_egg_incubator(item_id=ib['id'],pokemon_id=eggs.pop(0)['id'])
                         if "USE_ITEM_EGG_INCUBATOR" in ret['responses']:
                             break
                     if "result" in ret["responses"]['USE_ITEM_EGG_INCUBATOR'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
                         incubators_loaded += 1
 
-        if last_walked != walked:
-            ang = random.uniform(0,360)
-        last_walked = walked
-
-        r = .00015 + random.gauss(.00005, .00001)
-        angtmp = (ang + random.gauss(0,.15)) % 360
-        newposition = (position[0]+math.cos(angtmp)*r, position[1]+math.sin(angtmp)*r, 0)
-        #ang = angtmp
-
-        lat = util.f2i(newposition[0])
-        lng = util.f2i(newposition[1])
-        api.set_position(*newposition)
-        api.player_update(latitude = lat, longitude = lng)
-
         normalized_reticle_size = 1.950 - random.uniform(0, .3)
         normalized_hit_position = 1.0# + random.uniform(0,.1)
         spin_modifier = 1.0 - random.uniform(0, .1)
         print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
         while True:
-            time.sleep(0.2)
-            slept += 0.2
-            ret = api.get_incense_pokemon(player_latitude=newposition[0], player_longitude=newposition[1])
+            time.sleep(0.25)
+            slept += 0.25
+            ret = api.get_incense_pokemon(player_latitude=position[0], player_longitude=position[1])
             if "GET_INCENSE_POKEMON" in ret['responses']:
                 break
         print(ret)
         if ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
             pokemon = ret["responses"]["GET_INCENSE_POKEMON"]
             while True:
-                time.sleep(0.2)
-                slept += 0.2
+                time.sleep(0.25)
+                slept += 0.25
                 enc = api.incense_encounter(encounter_id=pokemon['encounter_id'], encounter_location=pokemon['encounter_location'])
                 if "INCENSE_ENCOUNTER" in enc['responses']:
                     break
             print(enc)
             if enc['responses']['INCENSE_ENCOUNTER']['result'] == 1:
-                ret = api.catch_pokemon(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['encounter_location'], pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
+                while True:
+                    time.sleep(0.25)
+                    slept += 0.25
+                    ret = api.catch_pokemon(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['encounter_location'], pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
+                    if "CATCH_POKEMON" in ret['responses']:
+                        break
                 print(ret)
+                if "status" in ret['responses']['CATCH_POKEMON']:
+                    if ret['responses']['CATCH_POKEMON']['status'] == 1:
+                        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        print("INCENSE_CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng), normalized_reticle_size, spin_modifier))
+                        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                        stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
+                        candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
+                        xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
+                        catches.append(pokemon)
+                        break
+                    elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
+                        break
+                else:
+                    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                    print("INCENSE_CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng), normalized_reticle_size, spin_modifier))
+                    print(pokemon)
+                    print(ret)
+                    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                    break
         print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
-        newspins, newcatches, newstardust, newcandy, newxp, slept = find_poi(api, newposition[0], newposition[1], sorted(balls), slept)
+        newspins, newcatches, newstardust, newcandy, newxp, slept = find_poi(api, position[0], position[1], sorted(balls), slept)
         spins += newspins
         catches += newcatches
         stardust += newstardust
         candy += newcandy
         xp += newxp
-        coords.append({'lat': newposition[0], 'lng': newposition[1]})
+        coords.append({'lat': position[0], 'lng': position[1]})
 
         m, s = divmod(time.time()-start_time, 60)
         h, m = divmod(m, 60)
@@ -500,12 +509,12 @@ def main():
         sys.stdout.write(" earned_stardust: %d\n" % (stardust))
         sys.stdout.write(" earned_candy: %d\n" % (candy))
         sys.stdout.write(" earned_xp: %d\n" % (xp))
-        sys.stdout.write(" position: (%.5f,%.5f)\n" % (newposition[0], newposition[1]))
+        sys.stdout.write(" position: (%.5f,%.5f)\n" % (position[0], position[1]))
         sys.stdout.write("=========================================\n")
         sys.stdout.flush()
 
         map = Map()
-        map._player = newposition
+        map._player = position
         for coord in coords:
             map.add_position((coord['lat'], coord['lng']))
         for spin in spins:
@@ -516,9 +525,20 @@ def main():
             print(map, file=out)
 
         slept = 5 - slept
-        print(slept)
         if slept > 0:
+            print("Waiting %f more seconds." % (slept))
             time.sleep(slept)
+        else:
+            print("No need to wait due to throttling.")
+
+        if last_walked != walked:
+            ang = random.uniform(0,360)
+        last_walked = walked
+
+        r = .00015 + random.gauss(.00005, .00001)
+        angtmp = (ang + random.gauss(0,.15)) % 360
+        position = (position[0]+math.cos(angtmp)*r, position[1]+math.sin(angtmp)*r, 0)
+        api.set_position(*position)
 
 
 
