@@ -546,7 +546,7 @@ def main():
         newconfig = vars(config)
         newconfig["location"] = "%f,%f" % (position[0],position[1])
         with open("config.json", "w") as out:
-            json.dump(newconfig, out)
+            json.dump(newconfig, out, indent=4, sort_keys=True)
 
 
 
