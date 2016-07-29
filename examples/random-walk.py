@@ -278,15 +278,6 @@ def main():
         log.error('Position could not be found by name')
         return
 
-    # instantiate pgoapi
-    api = pgoapi.PGoApi()
-
-    # provide player position on the earth
-    api.set_position(*position)
-
-    if not api.login(config.auth_service, config.username, config.password):
-        return
-
     coords = []
     spins = []
     catches = []
@@ -298,249 +289,265 @@ def main():
     incubators_loaded = 0
     eggs_hatched = 0
     incense_catches = []
-
     ang = random.uniform(0,360)
-
     start_time = time.time()
-
     last_walked = 0
-
     username = "unknown"
     stats = None
 
+    # instantiate pgoapi
+    api = pgoapi.PGoApi()
+    # provide player position on the earth
+    api.set_position(*position)
+
+    reconnect = True
+
     while True:
-        slept = 0
-        while True:
-            time.sleep(0.25)
-            slept += 0.25
-            ret = api.get_player()
-            if "GET_PLAYER" in ret['responses']:
-                player = ret["responses"]["GET_PLAYER"]["player_data"]
-                break
-        username = player["username"]
-        total_stardust = 0
-        for cur in player["currencies"]:
-            if cur["name"] == "STARDUST":
-                total_stardust = cur["amount"]
-        inventory = 0
-        mons = 0
-        position = api.get_position()
-        target_km = []
-        while True:
-            time.sleep(0.25)
-            slept += 0.25
-            ret = api.get_inventory()
-            if "GET_INVENTORY" in ret['responses']:
-                items = ret["responses"]["GET_INVENTORY"]["inventory_delta"]["inventory_items"]
-                break
-        walked = 0
-        balls = []
-        eggs = []
-        incubators = []
-        for item in items:
-            if "pokemon_data" in item["inventory_item_data"]:
-                if "is_egg" in item["inventory_item_data"]["pokemon_data"]:
-                    eggs.append(item["inventory_item_data"]["pokemon_data"])
-                    mons += 1
+        if reconnect:
+            while True:
+                sys.stdout.write("Performing authentication...")
+                if not api.login(config.auth_service, config.username, config.password):
+                    sys.stdout.write("failed.\n")
+                    time.sleep(1)
                 else:
-                    pq = 0
-                    for iv in ["individual_attack", "individual_defense", "individual_stamina"]:
-                        if iv in item["inventory_item_data"]["pokemon_data"]:
-                            pq += item["inventory_item_data"]["pokemon_data"][iv]
-                    pq = int(round(pq/45.0,2)*100)
-                    if pq < config.powerquotient:
-                        while True:
-                            time.sleep(0.25)
-                            slept += 0.25
-                            ret = api.release_pokemon(pokemon_id=item["inventory_item_data"]["pokemon_data"]["id"])
-                            if "RELEASE_POKEMON" in ret['responses']:
-                                break
-                        if "result" in ret["responses"]["RELEASE_POKEMON"] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
-                            candy += ret["responses"]["RELEASE_POKEMON"]["candy_awarded"]
-                            releases += 1
-                        else:
-                            mons += 1
-                    else:
-                        mons += 1
-            if "item" in item["inventory_item_data"]:
-                if item["inventory_item_data"]["item"]["item_id"] in [1,2,3]:
-                    if "count" in item["inventory_item_data"]["item"]:
-                        balls += [item["inventory_item_data"]["item"]["item_id"]]*item["inventory_item_data"]["item"]["count"]
-                    else:
-                        balls += [item["inventory_item_data"]["item"]["item_id"]]
-                if "count" in item["inventory_item_data"]["item"]:
-                    inventory += item["inventory_item_data"]["item"]["count"]
-                else:
-                    inventory += 1
-                if item["inventory_item_data"]["item"]["item_id"] in [101,201,701]:
-                    if "count" in item["inventory_item_data"]["item"]:
-                        ri = item["inventory_item_data"]["item"]["count"]
-                    else:
-                        ri = 1
-                    while True:
-                        time.sleep(0.3)
-                        slept += 0.3
-                        ret = api.recycle_inventory_item(item_id=item["inventory_item_data"]["item"]["item_id"], count=ri)
-                        if "RECYCLE_INVENTORY_ITEM" in ret['responses']:
-                            break
-                    if ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
-                        recycled_items += ri
-                        inventory -= ri
-
-            if "egg_incubators" in item["inventory_item_data"]:
-                for ib in item["inventory_item_data"]["egg_incubators"]["egg_incubator"]:
-                    incubators.append(ib)
-                    if "target_km_walked" in ib:
-                        target_km.append(ib["target_km_walked"])
-            elif "player_stats" in item["inventory_item_data"]:
-                stats = item["inventory_item_data"]["player_stats"]
-                walked = item["inventory_item_data"]["player_stats"]["km_walked"]
-        if len(target_km) > 0:
-            target_km = min(target_km)
-            if walked >= target_km:
-                while True:
-                    time.sleep(0.25)
-                    slept += 0.25
-                    ret = api.get_hatched_eggs()
-                    if "GET_HATCHED_EGGS" in ret['responses']:
-                        break
-                if "success" in ret['responses']['GET_HATCHED_EGGS'] and ret["responses"]['GET_HATCHED_EGGS']["success"]:
-                    stardust += sum(ret['responses']["GET_HATCHED_EGGS"]["stardust_awarded"])
-                    candy += sum(ret['responses']["GET_HATCHED_EGGS"]["candy_awarded"])
-                    xp += sum(ret['responses']["GET_HATCHED_EGGS"]["experience_awarded"])
-                    eggs_hatched += 1
-        else:
-            target_km = -1
-
-        for ib in incubators:
-            if not 'pokemon_id' in ib:
-                if len(eggs) > 0:
-                    while True:
-                        time.sleep(0.25)
-                        slept += 0.25
-                        ret = api.use_item_egg_incubator(item_id=ib['id'],pokemon_id=eggs.pop(0)['id'])
-                        if "USE_ITEM_EGG_INCUBATOR" in ret['responses']:
-                            break
-                    if "result" in ret["responses"]['USE_ITEM_EGG_INCUBATOR'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
-                        incubators_loaded += 1
-
-        normalized_reticle_size = 1.950 - random.uniform(0, .3)
-        normalized_hit_position = 1.0# + random.uniform(0,.1)
-        spin_modifier = 1.0 - random.uniform(0, .1)
-        while True:
-            time.sleep(0.25)
-            slept += 0.25
-            ret = api.get_incense_pokemon(player_latitude=position[0], player_longitude=position[1])
-            if "GET_INCENSE_POKEMON" in ret['responses']:
-                break
-        if ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
-            pokemon = ret["responses"]["GET_INCENSE_POKEMON"]
+                    sys.stdout.write("succeeded.\n")
+                    reconnect = False
+                    break
+        try:
+            slept = 0
             while True:
                 time.sleep(0.25)
                 slept += 0.25
-                enc = api.incense_encounter(encounter_id=pokemon['encounter_id'], encounter_location=pokemon['encounter_location'])
-                if "INCENSE_ENCOUNTER" in enc['responses']:
+                ret = api.get_player()
+                if "GET_PLAYER" in ret['responses']:
+                    player = ret["responses"]["GET_PLAYER"]["player_data"]
                     break
-            if enc['responses']['INCENSE_ENCOUNTER']['result'] == 1:
+            username = player["username"]
+            total_stardust = 0
+            for cur in player["currencies"]:
+                if cur["name"] == "STARDUST":
+                    total_stardust = cur["amount"]
+            inventory = 0
+            mons = 0
+            position = api.get_position()
+            target_km = []
+            while True:
+                time.sleep(0.25)
+                slept += 0.25
+                ret = api.get_inventory()
+                if "GET_INVENTORY" in ret['responses']:
+                    items = ret["responses"]["GET_INVENTORY"]["inventory_delta"]["inventory_items"]
+                    break
+            walked = 0
+            balls = []
+            eggs = []
+            incubators = []
+            for item in items:
+                if "pokemon_data" in item["inventory_item_data"]:
+                    if "is_egg" in item["inventory_item_data"]["pokemon_data"]:
+                        eggs.append(item["inventory_item_data"]["pokemon_data"])
+                        mons += 1
+                    else:
+                        pq = 0
+                        for iv in ["individual_attack", "individual_defense", "individual_stamina"]:
+                            if iv in item["inventory_item_data"]["pokemon_data"]:
+                                pq += item["inventory_item_data"]["pokemon_data"][iv]
+                        pq = int(round(pq/45.0,2)*100)
+                        if pq < config.powerquotient:
+                            while True:
+                                time.sleep(0.25)
+                                slept += 0.25
+                                ret = api.release_pokemon(pokemon_id=item["inventory_item_data"]["pokemon_data"]["id"])
+                                if "RELEASE_POKEMON" in ret['responses']:
+                                    break
+                            if "result" in ret["responses"]["RELEASE_POKEMON"] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
+                                candy += ret["responses"]["RELEASE_POKEMON"]["candy_awarded"]
+                                releases += 1
+                            else:
+                                mons += 1
+                        else:
+                            mons += 1
+                if "item" in item["inventory_item_data"]:
+                    if item["inventory_item_data"]["item"]["item_id"] in [1,2,3]:
+                        if "count" in item["inventory_item_data"]["item"]:
+                            balls += [item["inventory_item_data"]["item"]["item_id"]]*item["inventory_item_data"]["item"]["count"]
+                        else:
+                            balls += [item["inventory_item_data"]["item"]["item_id"]]
+                    if "count" in item["inventory_item_data"]["item"]:
+                        inventory += item["inventory_item_data"]["item"]["count"]
+                    else:
+                        inventory += 1
+                    if item["inventory_item_data"]["item"]["item_id"] in [101,201,701]:
+                        if "count" in item["inventory_item_data"]["item"]:
+                            ri = item["inventory_item_data"]["item"]["count"]
+                        else:
+                            ri = 1
+                        while True:
+                            time.sleep(0.3)
+                            slept += 0.3
+                            ret = api.recycle_inventory_item(item_id=item["inventory_item_data"]["item"]["item_id"], count=ri)
+                            if "RECYCLE_INVENTORY_ITEM" in ret['responses']:
+                                break
+                        if ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
+                            recycled_items += ri
+                            inventory -= ri
+
+                if "egg_incubators" in item["inventory_item_data"]:
+                    for ib in item["inventory_item_data"]["egg_incubators"]["egg_incubator"]:
+                        incubators.append(ib)
+                        if "target_km_walked" in ib:
+                            target_km.append(ib["target_km_walked"])
+                elif "player_stats" in item["inventory_item_data"]:
+                    stats = item["inventory_item_data"]["player_stats"]
+                    walked = item["inventory_item_data"]["player_stats"]["km_walked"]
+            if len(target_km) > 0:
+                target_km = min(target_km)
+                if walked >= target_km:
+                    while True:
+                        time.sleep(0.25)
+                        slept += 0.25
+                        ret = api.get_hatched_eggs()
+                        if "GET_HATCHED_EGGS" in ret['responses']:
+                            break
+                    if "success" in ret['responses']['GET_HATCHED_EGGS'] and ret["responses"]['GET_HATCHED_EGGS']["success"]:
+                        stardust += sum(ret['responses']["GET_HATCHED_EGGS"]["stardust_awarded"])
+                        candy += sum(ret['responses']["GET_HATCHED_EGGS"]["candy_awarded"])
+                        xp += sum(ret['responses']["GET_HATCHED_EGGS"]["experience_awarded"])
+                        eggs_hatched += 1
+            else:
+                target_km = -1
+
+            for ib in incubators:
+                if not 'pokemon_id' in ib:
+                    if len(eggs) > 0:
+                        while True:
+                            time.sleep(0.25)
+                            slept += 0.25
+                            ret = api.use_item_egg_incubator(item_id=ib['id'],pokemon_id=eggs.pop(0)['id'])
+                            if "USE_ITEM_EGG_INCUBATOR" in ret['responses']:
+                                break
+                        if "result" in ret["responses"]['USE_ITEM_EGG_INCUBATOR'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
+                            incubators_loaded += 1
+
+            normalized_reticle_size = 1.950 - random.uniform(0, .3)
+            normalized_hit_position = 1.0# + random.uniform(0,.1)
+            spin_modifier = 1.0 - random.uniform(0, .1)
+            while True:
+                time.sleep(0.25)
+                slept += 0.25
+                ret = api.get_incense_pokemon(player_latitude=position[0], player_longitude=position[1])
+                if "GET_INCENSE_POKEMON" in ret['responses']:
+                    break
+            if ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
+                pokemon = ret["responses"]["GET_INCENSE_POKEMON"]
                 while True:
                     time.sleep(0.25)
                     slept += 0.25
-                    ret = api.catch_pokemon(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['encounter_location'], pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
-                    if "CATCH_POKEMON" in ret['responses']:
+                    enc = api.incense_encounter(encounter_id=pokemon['encounter_id'], encounter_location=pokemon['encounter_location'])
+                    if "INCENSE_ENCOUNTER" in enc['responses']:
                         break
-                if "status" in ret['responses']['CATCH_POKEMON']:
-                    if ret['responses']['CATCH_POKEMON']['status'] == 1:
-                        print("INCENSE_CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
-                        stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
-                        candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
-                        xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
-                        incense_catches.append(pokemon)
+                if enc['responses']['INCENSE_ENCOUNTER']['result'] == 1:
+                    while True:
+                        time.sleep(0.25)
+                        slept += 0.25
+                        ret = api.catch_pokemon(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['encounter_location'], pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
+                        if "CATCH_POKEMON" in ret['responses']:
+                            break
+                    if "status" in ret['responses']['CATCH_POKEMON']:
+                        if ret['responses']['CATCH_POKEMON']['status'] == 1:
+                            print("INCENSE_CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
+                            stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
+                            candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
+                            xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
+                            incense_catches.append(pokemon)
+                            break
+                        elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
+                            break
+                    else:
+                        print("INCENSE_CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
                         break
-                    elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
-                        break
-                else:
-                    print("INCENSE_CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
-                    break
 
-        newspins, newcatches, newincensecatches, newstardust, newcandy, newxp, slept = find_poi(api, position[0], position[1], sorted(balls), slept)
-        spins += newspins
-        catches += newcatches
-        incense_catches += newincensecatches
-        stardust += newstardust
-        candy += newcandy
-        xp += newxp
-        coords.append({'lat': position[0], 'lng': position[1]})
+            newspins, newcatches, newincensecatches, newstardust, newcandy, newxp, slept = find_poi(api, position[0], position[1], sorted(balls), slept)
+            spins += newspins
+            catches += newcatches
+            incense_catches += newincensecatches
+            stardust += newstardust
+            candy += newcandy
+            xp += newxp
+            coords.append({'lat': position[0], 'lng': position[1]})
 
-        m, s = divmod(time.time()-start_time, 60)
-        h, m = divmod(m, 60)
+            m, s = divmod(time.time()-start_time, 60)
+            h, m = divmod(m, 60)
 
-        api.level_up_rewards(level=stats["level"])
+            api.level_up_rewards(level=stats["level"])
 
-        progress = {
-            "username": "%s" % username,
-            "level": "%s" % stats["level"],
-            "levelup_xp_needed": "%d" % (stats["next_level_xp"]-stats["experience"]),
-            "elapsed_time": "%d:%02d:%02d" % (h, m, s),
-            "inventory": "%d/%d" % (inventory, player["max_item_storage"]),
-            "pokemon": "%d/%d" % (mons, player["max_pokemon_storage"]),
-            "total_stardust": "%d" % total_stardust,
-            "km_walked": "%.1f" % walked,
-            "target_km_walked": "%.1f" % target_km,
-            "spins": "%d" % len(spins),
-            "recycled_items": "%d" % recycled_items,
-            "total_catches": "%d" % (len(catches)+len(incense_catches)),
-            "incense_catches": "%d" % len(incense_catches),
-            "releases": "%d" % releases,
-            "incubators_loaded": "%d" % incubators_loaded,
-            "eggs_hatched": "%d" % eggs_hatched,
-            "earned_stardust": "%d" % stardust,
-            "earned_candy": "%d" % candy,
-            "earned_xp": "%d" % xp,
-            "position": "(%.5f,%.5f)" % (position[0], position[1])
-        }
+            progress = {
+                "username": "%s" % username,
+                "level": "%s" % stats["level"],
+                "levelup_xp_needed": "%d" % (stats["next_level_xp"]-stats["experience"]),
+                "elapsed_time": "%d:%02d:%02d" % (h, m, s),
+                "inventory": "%d/%d" % (inventory, player["max_item_storage"]),
+                "pokemon": "%d/%d" % (mons, player["max_pokemon_storage"]),
+                "total_stardust": "%d" % total_stardust,
+                "km_walked": "%.1f" % walked,
+                "target_km_walked": "%.1f" % target_km,
+                "spins": "%d" % len(spins),
+                "recycled_items": "%d" % recycled_items,
+                "total_catches": "%d" % (len(catches)+len(incense_catches)),
+                "incense_catches": "%d" % len(incense_catches),
+                "releases": "%d" % releases,
+                "incubators_loaded": "%d" % incubators_loaded,
+                "eggs_hatched": "%d" % eggs_hatched,
+                "earned_stardust": "%d" % stardust,
+                "earned_candy": "%d" % candy,
+                "earned_xp": "%d" % xp,
+                "position": "(%.5f,%.5f)" % (position[0], position[1])
+            }
 
-        sys.stdout.write("=========================================\n")
-        sys.stdout.write(json.dumps(progress, indent=2))
-        sys.stdout.write("=========================================\n")
-        sys.stdout.flush()
-        with open("progress.json", "w") as out:
-            json.dump(progress, out, indent=2)
+            sys.stdout.write("=========================================\n")
+            sys.stdout.write(json.dumps(progress, indent=2))
+            sys.stdout.write("=========================================\n")
+            sys.stdout.flush()
+            with open("progress.json", "w") as out:
+                json.dump(progress, out, indent=2)
 
-        map = Map()
-        map._player = position
-        for coord in coords:
-            map.add_position((coord['lat'], coord['lng']))
-        for catch in catches:
-            map.add_point((catch['latitude'], catch['longitude']), "http://pokeapi.co/media/sprites/pokemon/%d.png" % catch["pokemon_data"]["pokemon_id"])
-        for incense_catche in incense_catches:
-            map.add_point((incense_catche['latitude'], incense_catche['longitude']), "http://pokeapi.co/media/sprites/pokemon/%d.png" % catch["pokemon_data"]["pokemon_id"])
-        for spin in spins:
-            map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
+            map = Map()
+            map._player = position
+            for coord in coords:
+                map.add_position((coord['lat'], coord['lng']))
+            for catch in catches:
+                map.add_point((catch['latitude'], catch['longitude']), "http://pokeapi.co/media/sprites/pokemon/%d.png" % catch["pokemon_data"]["pokemon_id"])
+            for incense_catche in incense_catches:
+                map.add_point((incense_catche['latitude'], incense_catche['longitude']), "http://pokeapi.co/media/sprites/pokemon/%d.png" % catch["pokemon_data"]["pokemon_id"])
+            for spin in spins:
+                map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
 
-        with open("%s.html" % username, "w") as out:
-            print(map, file=out)
+            with open("%s.html" % username, "w") as out:
+                print(map, file=out)
 
-        slept = 5 - slept
-        if slept > 0:
-            print("Waiting %f more seconds." % (slept))
-            time.sleep(slept)
-        else:
-            print("No need to wait due to throttling.")
+            slept = 5 - slept
+            if slept > 0:
+                print("Waiting %f more seconds." % (slept))
+                time.sleep(slept)
+            else:
+                print("No need to wait due to throttling.")
 
-        if last_walked != walked:
-            ang = random.uniform(0,360)
-        last_walked = walked
+            if last_walked != walked:
+                ang = random.uniform(0,360)
+            last_walked = walked
 
-        r = .0002 + random.gauss(.00005, .00001)
-        angtmp = (ang + random.gauss(0,.15)) % 360
-        position = (position[0]+math.cos(angtmp)*r, position[1]+math.sin(angtmp)*r, 0)
-        api.set_position(*position)
+            r = .0002 + random.gauss(.00005, .00001)
+            angtmp = (ang + random.gauss(0,.15)) % 360
+            position = (position[0]+math.cos(angtmp)*r, position[1]+math.sin(angtmp)*r, 0)
+            api.set_position(*position)
 
-        newconfig = vars(config)
-        newconfig["location"] = "%f,%f" % (position[0],position[1])
-        with open("config.json", "w") as out:
-            json.dump(newconfig, out, indent=2, sort_keys=True)
-
+            newconfig = vars(config)
+            newconfig["location"] = "%f,%f" % (position[0],position[1])
+            with open("config.json", "w") as out:
+                json.dump(newconfig, out, indent=2, sort_keys=True)
+        except pgoapi.exceptions.NotLoggedInException as e:
+            sys.stdout.write("Connection lost.\n")
+            reconnect = True
 
 
 if __name__ == '__main__':
