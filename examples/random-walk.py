@@ -41,6 +41,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
 # import Pokemon Go API lib
 from pgoapi import pgoapi
+import pgoapi.exceptions
 from pgoapi import utilities as util
 
 # other stuff
@@ -371,26 +372,19 @@ def main():
                     if item["inventory_item_data"]["item"]["item_id"] in [1,2,3]:
                         if "count" in item["inventory_item_data"]["item"]:
                             balls += [item["inventory_item_data"]["item"]["item_id"]]*item["inventory_item_data"]["item"]["count"]
-                        else:
-                            balls += [item["inventory_item_data"]["item"]["item_id"]]
                     if "count" in item["inventory_item_data"]["item"]:
                         inventory += item["inventory_item_data"]["item"]["count"]
-                    else:
-                        inventory += 1
                     if item["inventory_item_data"]["item"]["item_id"] in [101,201,701]:
                         if "count" in item["inventory_item_data"]["item"]:
-                            ri = item["inventory_item_data"]["item"]["count"]
-                        else:
-                            ri = 1
-                        while True:
-                            time.sleep(0.3)
-                            slept += 0.3
-                            ret = api.recycle_inventory_item(item_id=item["inventory_item_data"]["item"]["item_id"], count=ri)
-                            if "RECYCLE_INVENTORY_ITEM" in ret['responses']:
-                                break
-                        if ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
-                            recycled_items += ri
-                            inventory -= ri
+                            while True:
+                                time.sleep(0.3)
+                                slept += 0.3
+                                ret = api.recycle_inventory_item(item_id=item["inventory_item_data"]["item"]["item_id"], count=item["inventory_item_data"]["item"]["count"])
+                                if "RECYCLE_INVENTORY_ITEM" in ret['responses']:
+                                    break
+                            if ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
+                                recycled_items += ri
+                                inventory -= ri
 
                 if "egg_incubators" in item["inventory_item_data"]:
                     for ib in item["inventory_item_data"]["egg_incubators"]["egg_incubator"]:
@@ -536,7 +530,7 @@ def main():
                 ang = random.uniform(0,360)
             last_walked = walked
 
-            r = .0002 + random.gauss(.00005, .00001)
+            r = .00015 + random.gauss(.00005, .00001)
             angtmp = (ang + random.gauss(0,.15)) % 360
             position = (position[0]+math.cos(angtmp)*r, position[1]+math.sin(angtmp)*r, 0)
             api.set_position(*position)
