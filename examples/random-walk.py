@@ -224,9 +224,7 @@ def find_poi(api, lat, lng, balls, slept):
                                             break
                                     if "status" in ret['responses']['CATCH_POKEMON']:
                                         if ret['responses']['CATCH_POKEMON']['status'] == 1:
-                                            print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                                             print("CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng), normalized_reticle_size, spin_modifier))
-                                            print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                                             stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
                                             candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
                                             xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
@@ -235,11 +233,7 @@ def find_poi(api, lat, lng, balls, slept):
                                         elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
                                             break
                                     else:
-                                        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                                         print("CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng), normalized_reticle_size, spin_modifier))
-                                        print(pokemon)
-                                        print(ret)
-                                        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                                         break
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
@@ -432,14 +426,12 @@ def main():
         normalized_reticle_size = 1.950 - random.uniform(0, .3)
         normalized_hit_position = 1.0# + random.uniform(0,.1)
         spin_modifier = 1.0 - random.uniform(0, .1)
-        print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
         while True:
             time.sleep(0.25)
             slept += 0.25
             ret = api.get_incense_pokemon(player_latitude=position[0], player_longitude=position[1])
             if "GET_INCENSE_POKEMON" in ret['responses']:
                 break
-        print(ret)
         if ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
             pokemon = ret["responses"]["GET_INCENSE_POKEMON"]
             while True:
@@ -448,7 +440,6 @@ def main():
                 enc = api.incense_encounter(encounter_id=pokemon['encounter_id'], encounter_location=pokemon['encounter_location'])
                 if "INCENSE_ENCOUNTER" in enc['responses']:
                     break
-            print(enc)
             if enc['responses']['INCENSE_ENCOUNTER']['result'] == 1:
                 while True:
                     time.sleep(0.25)
@@ -456,12 +447,9 @@ def main():
                     ret = api.catch_pokemon(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['encounter_location'], pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
                     if "CATCH_POKEMON" in ret['responses']:
                         break
-                print(ret)
                 if "status" in ret['responses']['CATCH_POKEMON']:
                     if ret['responses']['CATCH_POKEMON']['status'] == 1:
-                        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                         print("INCENSE_CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
-                        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                         stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
                         candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
                         xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
@@ -471,13 +459,8 @@ def main():
                     elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
                         break
                 else:
-                    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                     print("INCENSE_CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
-                    print(pokemon)
-                    print(ret)
-                    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                     break
-        print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
         newspins, newcatches, newstardust, newcandy, newxp, slept = find_poi(api, position[0], position[1], sorted(balls), slept)
         spins += newspins
