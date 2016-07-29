@@ -475,29 +475,35 @@ def main():
 
         api.level_up_rewards(level=stats["level"])
 
+        progress = {
+            "username": "%s" % username,
+            "level": "%s" % stats["level"],
+            "levelup_xp_needed": "%d" % (stats["next_level_xp"]-stats["experience"]),
+            "elapsed_time": "%d:%02d:%02d" % (h, m, s),
+            "inventory": "%d/%d" % (inventory, player["max_item_storage"]),
+            "pokemon": "%d/%d" % (mons, player["max_pokemon_storage"]),
+            "total_stardust": "%d" % total_stardust,
+            "km_walked": "%.1f" % walked,
+            "target_km_walked": "%.1f" % target_km,
+            "spins": "%d" % len(spins),
+            "recycled_items": "%d" % recycled_items,
+            "total_catches": "%d" % len(catches),
+            "incense_catches": "%d" % incense_catches,
+            "releases": "%d" % releases,
+            "incubators_loaded": "%d" % incubators_loaded,
+            "eggs_hatched": "%d" % eggs_hatched,
+            "earned_stardust": "%d" % stardust,
+            "earned_candy": "%d" % candy,
+            "earned_xp": "%d" % xp,
+            "position": "(%.5f,%.5f)" % (position[0], position[1])
+        }
+
         sys.stdout.write("=========================================\n")
-        sys.stdout.write(" username: %s\n" % (username))
-        sys.stdout.write(" level: %s\n" % (stats["level"]))
-        sys.stdout.write(" levelup_xp_needed: %d\n" % (stats["next_level_xp"]-stats["experience"]))
-        sys.stdout.write(" elapsed_time: %d:%02d:%02d\n" % (h, m, s))
-        sys.stdout.write(" inventory: %d/%d\n" % (inventory, player["max_item_storage"]))
-        sys.stdout.write(" pokemon: %d/%d\n" % (mons, player["max_pokemon_storage"]))
-        sys.stdout.write(" total_stardust: %d\n" % (total_stardust))
-        sys.stdout.write(" km_walked: %.1f\n" % (walked))
-        sys.stdout.write(" target_km_walked: %.1f\n" % (target_km))
-        sys.stdout.write(" spins: %d\n" % (len(spins)))
-        sys.stdout.write(" recycled_items: %d\n" % (recycled_items))
-        sys.stdout.write(" total_catches: %d\n" % len(catches))
-        sys.stdout.write(" incense_catches: %d\n" % incense_catches)
-        sys.stdout.write(" releases: %d\n" % releases)
-        sys.stdout.write(" incubators_loaded: %d\n" % incubators_loaded)
-        sys.stdout.write(" eggs_hatched: %d\n" % eggs_hatched)
-        sys.stdout.write(" earned_stardust: %d\n" % (stardust))
-        sys.stdout.write(" earned_candy: %d\n" % (candy))
-        sys.stdout.write(" earned_xp: %d\n" % (xp))
-        sys.stdout.write(" position: (%.5f,%.5f)\n" % (position[0], position[1]))
+        sys.stdout.write(json.dumps(progress, indent=4, sort_keys=True))
         sys.stdout.write("=========================================\n")
         sys.stdout.flush()
+        with open("progress.json", "w") as out:
+            json.dump(progress, out, indent=4, sort_keys=True)
 
         map = Map()
         map._player = position
