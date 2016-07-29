@@ -396,10 +396,13 @@ def main():
         if len(target_km) > 0:
             target_km = min(target_km)
             if walked >= target_km:
-                api.get_hatched_eggs()
-                ret = api.call()
+                while True:
+                    api.get_hatched_eggs()
+                    ret = api.call()
+                    if "GET_HATCHED_EGGS" in ret['responses']:
+                        break
                 print(ret)
-                if "result" in ret["responses"]['GET_HATCHED_EGGS'] and ret["responses"]['GET_HATCHED_EGGS']["result"] == 1:
+                if "success" in ret['responses']['GET_HATCHED_EGGS'] and ret["responses"]['GET_HATCHED_EGGS']["success"]:
                     stardust += sum(ret['responses']["GET_HATCHED_EGGS"]["stardust_awarded"])
                     candy += sum(ret['responses']["GET_HATCHED_EGGS"]["candy_awarded"])
                     xp += sum(ret['responses']["GET_HATCHED_EGGS"]["experience_awarded"])
@@ -410,8 +413,11 @@ def main():
         for ib in incubators:
             if not 'pokemon_id' in ib:
                 if len(eggs) > 0:
-                    api.use_item_egg_incubator(item_id=ib['id'],pokemon_id=eggs.pop(0)['id'])
-                    ret = api.call()
+                    while True:
+                        api.use_item_egg_incubator(item_id=ib['id'],pokemon_id=eggs.pop(0)['id'])
+                        ret = api.call()
+                        if "USE_ITEM_EGG_INCUBATOR" in ret['responses']:
+                            break
                     if "result" in ret["responses"]['USE_ITEM_EGG_INCUBATOR'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
                         incubators_loaded += 1
 
@@ -515,7 +521,7 @@ def main():
         sys.stdout.write(" elapsed_time: %d:%02d:%02d\n" % (h, m, s))
         sys.stdout.write(" inventory: %d/%d\n" % (inventory, player["max_item_storage"]))
         sys.stdout.write(" pokemon: %d/%d\n" % (mons, player["max_pokemon_storage"]))
-        sys.stdout.write(" total_stardust: %.1f\n" % (total_stardust))
+        sys.stdout.write(" total_stardust: %d\n" % (total_stardust))
         sys.stdout.write(" km_walked: %.1f\n" % (walked))
         sys.stdout.write(" target_km_walked: %.1f\n" % (target_km))
         sys.stdout.write(" spins: %d\n" % (len(spins)))
