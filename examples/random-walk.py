@@ -302,6 +302,7 @@ def main():
     xp = 0
     incubators_loaded = 0
     eggs_hatched = 0
+    incense_catches = 0
 
     ang = random.uniform(0,360)
 
@@ -459,18 +460,19 @@ def main():
                 if "status" in ret['responses']['CATCH_POKEMON']:
                     if ret['responses']['CATCH_POKEMON']['status'] == 1:
                         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                        print("INCENSE_CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng), normalized_reticle_size, spin_modifier))
+                        print("INCENSE_CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
                         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
                         stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
                         candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
                         xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
                         catches.append(pokemon)
+                        incense_catches += 1
                         break
                     elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
                         break
                 else:
                     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                    print("INCENSE_CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - lat, pokemon['longitude'] - lng), normalized_reticle_size, spin_modifier))
+                    print("INCENSE_CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
                     print(pokemon)
                     print(ret)
                     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -502,7 +504,8 @@ def main():
         sys.stdout.write(" target_km_walked: %.1f\n" % (target_km))
         sys.stdout.write(" spins: %d\n" % (len(spins)))
         sys.stdout.write(" recycled_items: %d\n" % (recycled_items))
-        sys.stdout.write(" catches: %d\n" % len(catches))
+        sys.stdout.write(" total_catches: %d\n" % len(catches))
+        sys.stdout.write(" incense_catches: %d\n" % incense_catches)
         sys.stdout.write(" releases: %d\n" % releases)
         sys.stdout.write(" incubators_loaded: %d\n" % incubators_loaded)
         sys.stdout.write(" eggs_hatched: %d\n" % eggs_hatched)
@@ -539,6 +542,11 @@ def main():
         angtmp = (ang + random.gauss(0,.15)) % 360
         position = (position[0]+math.cos(angtmp)*r, position[1]+math.sin(angtmp)*r, 0)
         api.set_position(*position)
+
+        newconfig = vars(config)
+        newconfig["location"] = "%f,%f" % (position[0],position[1])
+        with open("config.json", "w") as out:
+            json.dump(newconfig, out)
 
 
 
