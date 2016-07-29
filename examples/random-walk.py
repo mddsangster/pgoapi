@@ -443,24 +443,30 @@ def main():
                         break
                 if enc['responses']['INCENSE_ENCOUNTER']['result'] == 1:
                     while True:
-                        time.sleep(0.25)
-                        slept += 0.25
-                        ret = api.catch_pokemon(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['encounter_location'], pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
-                        if "CATCH_POKEMON" in ret['responses']:
+                        if len(balls) == 0:
                             break
-                    if "status" in ret['responses']['CATCH_POKEMON']:
-                        if ret['responses']['CATCH_POKEMON']['status'] == 1:
-                            print("INCENSE_CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
-                            stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
-                            candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
-                            xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
-                            incense_catches.append(pokemon)
+                        normalized_reticle_size = 1.950 - random.uniform(0, .5)
+                        normalized_hit_position = 1.0# + random.uniform(0,.1)
+                        spin_modifier = 1.0 - random.uniform(0, .1)
+                        while True:
+                            time.sleep(0.25)
+                            slept += 0.25
+                            ret = api.catch_pokemon(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['encounter_location'], pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
+                            if "CATCH_POKEMON" in ret['responses']:
+                                break
+                        if "status" in ret['responses']['CATCH_POKEMON']:
+                            if ret['responses']['CATCH_POKEMON']['status'] == 1:
+                                print("INCENSE_CATCH_GOOD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
+                                stardust += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["stardust"])
+                                candy += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["candy"])
+                                xp += sum(ret['responses']["CATCH_POKEMON"]['capture_award']["xp"])
+                                incense_catches.append(pokemon)
+                                break
+                            elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
+                                break
+                        else:
+                            print("INCENSE_CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
                             break
-                        elif ret['responses']['CATCH_POKEMON']['status'] == 0 or ret['responses']['CATCH_POKEMON']['status'] == 3:
-                            break
-                    else:
-                        print("INCENSE_CATCH_BAD=%f,%f,%f" % (math.hypot(pokemon['latitude'] - position[0], pokemon['longitude'] - position[1]), normalized_reticle_size, spin_modifier))
-                        break
 
             newspins, newcatches, newincensecatches, newstardust, newcandy, newxp, slept = find_poi(api, position[0], position[1], sorted(balls), slept)
             spins += newspins
@@ -501,7 +507,7 @@ def main():
 
             sys.stdout.write("=========================================\n")
             sys.stdout.write(json.dumps(progress, indent=2))
-            sys.stdout.write("=========================================\n")
+            sys.stdout.write("\n=========================================\n")
             sys.stdout.flush()
             with open("progress.json", "w") as out:
                 json.dump(progress, out, indent=2)
