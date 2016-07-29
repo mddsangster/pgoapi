@@ -500,11 +500,11 @@ def main():
         }
 
         sys.stdout.write("=========================================\n")
-        sys.stdout.write(json.dumps(progress, indent=4, sort_keys=True))
+        sys.stdout.write(json.dumps(progress, indent=2))
         sys.stdout.write("=========================================\n")
         sys.stdout.flush()
         with open("progress.json", "w") as out:
-            json.dump(progress, out, indent=4, sort_keys=True)
+            json.dump(progress, out, indent=2)
 
         map = Map()
         map._player = position
@@ -531,7 +531,7 @@ def main():
             ang = random.uniform(0,360)
         last_walked = walked
 
-        r = .00015 + random.gauss(.00005, .00001)
+        r = .0002 + random.gauss(.00005, .00001)
         angtmp = (ang + random.gauss(0,.15)) % 360
         position = (position[0]+math.cos(angtmp)*r, position[1]+math.sin(angtmp)*r, 0)
         api.set_position(*position)
@@ -539,7 +539,7 @@ def main():
         newconfig = vars(config)
         newconfig["location"] = "%f,%f" % (position[0],position[1])
         with open("config.json", "w") as out:
-            json.dump(newconfig, out, indent=4, sort_keys=True)
+            json.dump(newconfig, out, indent=2, sort_keys=True)
 
 
 
