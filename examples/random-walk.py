@@ -376,10 +376,11 @@ def main():
                         inventory += item["inventory_item_data"]["item"]["count"]
                     if item["inventory_item_data"]["item"]["item_id"] in [101,201,701]:
                         if "count" in item["inventory_item_data"]["item"]:
+                            ri = item["inventory_item_data"]["item"]["count"]
                             while True:
                                 time.sleep(0.3)
                                 slept += 0.3
-                                ret = api.recycle_inventory_item(item_id=item["inventory_item_data"]["item"]["item_id"], count=item["inventory_item_data"]["item"]["count"])
+                                ret = api.recycle_inventory_item(item_id=item["inventory_item_data"]["item"]["item_id"], count=ri)
                                 if "RECYCLE_INVENTORY_ITEM" in ret['responses']:
                                     break
                             if ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
