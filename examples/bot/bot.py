@@ -62,16 +62,17 @@ class PoGoBot(object):
 
     def prune_inventory(self, delay):
         sys.stdout.write("Pruning inventory...\n")
+        first = True
         for il in self.config["inventory_limits"]:
             if il in self.inventory["items"] and self.inventory["items"][il] > self.config["inventory_limits"][il]:
                 count = self.inventory["items"][il] - self.config["inventory_limits"][il]
                 ret = self.api.recycle_inventory_item(item_id=int(il), count=count)
                 time.sleep(delay)
                 if ret and "RECYCLE_INVENTORY_ITEM" in ret['responses'] and ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
-                    pl = ""
-                    if count > 1:
-                        pl = "s"
-                    sys.stdout.write("  Recycled %d %s%s\n" % (count, self.item_names[il], pl))
+                    if first:
+                        sys.stdout.write("  Recycled:\n")
+                        first = False
+                    sys.stdout.write("    %d x %s\n" % (count, self.item_names[il]))
 
     def process_inventory(self, inventory):
         ni = {
@@ -190,7 +191,7 @@ class PoGoBot(object):
                             else:
                                 ni[item["item_id"]] += 1
                         for item in ni:
-                            sys.stdout.write("      %d x Item %d\n" % (ni[item], item))
+                            sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
 
     def catch_pokemon(self, eid, spid, kind, pokemon, balls, delay):
         while True:
