@@ -107,6 +107,8 @@ class PoGoBot(object):
         sys.stdout.write("  Next level experience needed: %d\n" % (self.inventory["stats"]["next_level_xp"]-self.inventory["stats"]["experience"]))
         sys.stdout.write("  Kilometers walked: %.2f\n" % self.inventory["stats"]["km_walked"])
         sys.stdout.write("  Stardust: %d\n" % [cur["amount"] for cur in self.player["currencies"] if cur["name"] == "STARDUST"][0])
+        sys.stdout.write("  Item storage: %d/%d\n" % (sum(self.inventory["items"].values()), self.player["max_item_storage"]))
+        sys.stdout.write("  Pokemon storage: %d/%d\n" % ((len(self.inventory["pokemon"]) + len(self.inventory["eggs"])), self.player["max_pokemon_storage"]))
 
     def get_hatched_eggs(self, delay):
         sys.stdout.write("Getting hatched eggs...\n")
