@@ -125,6 +125,14 @@ class PoGoBot(object):
         sys.stdout.write("  Stardust: %d\n" % [cur["amount"] for cur in self.player["currencies"] if cur["name"] == "STARDUST"][0])
         sys.stdout.write("  Item storage: %d/%d\n" % (sum(self.inventory["items"].values()), self.player["max_item_storage"]))
         sys.stdout.write("  Pokemon storage: %d/%d\n" % ((len(self.inventory["pokemon"]) + len(self.inventory["eggs"])), self.player["max_pokemon_storage"]))
+        first = True
+        for ib in self.inventory["incubators"]:
+            if 'pokemon_id' in self.inventory["incubators"][ib]:
+                if first:
+                    sys.stdout.write("  Loaded incubators:\n")
+                    first = False
+                ib = self.inventory["incubators"][ib]
+                sys.stdout.write("    Remaining km: %f\n" % (ib["target_km_walked"]-self.inventory["stats"]["km_walked"]))
 
     def get_hatched_eggs(self, delay):
         sys.stdout.write("Getting hatched eggs...\n")
@@ -271,7 +279,7 @@ class PoGoBot(object):
     def load_incubators(self):
         sys.stdout.write("Loading incubators...\n")
         for ib in self.inventory["incubators"]:
-            if not 'pokemon_id' in ib:
+            if not 'pokemon_id' in self.inventory["incubators"][ib]:
                 ib = self.inventory["incubators"][ib]
                 if len(self.inventory["eggs"]) > 0:
                     bestegg = (None,0)
