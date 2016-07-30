@@ -100,10 +100,12 @@ class RpcApi:
         if not self._auth_provider or self._auth_provider.is_login() is False:
             raise NotLoggedInException()
 
-        request_proto = self._build_main_request(subrequests, player_position)
-        response = self._make_rpc(endpoint, request_proto)
-
-        response_dict = self._parse_main_response(response, subrequests)
+        while True:
+            request_proto = self._build_main_request(subrequests, player_position)
+            response = self._make_rpc(endpoint, request_proto)
+            response_dict = self._parse_main_response(response, subrequests)
+            if response_dict:
+                break
 
         if ('auth_ticket' in response_dict) and ('expire_timestamp_ms' in response_dict['auth_ticket']) and (self._auth_provider.is_new_ticket(response_dict['auth_ticket']['expire_timestamp_ms'])):
             had_ticket = self._auth_provider.has_ticket()
@@ -273,7 +275,7 @@ class RpcApi:
 
             subresponse_return = None
             try:
-                subresponse_extension = self.get_class(proto_classname)()         
+                subresponse_extension = self.get_class(proto_classname)()
             except Exception as e:
                 subresponse_extension = None
                 error = 'Protobuf definition for {} not found'.format(proto_classname)
@@ -281,7 +283,7 @@ class RpcApi:
                 self.log.debug(error)
 
             if subresponse_extension:
-                try: 
+                try:
                     subresponse_extension.ParseFromString(subresponse)
                     subresponse_return = protobuf_to_dict(subresponse_extension)
                 except:
