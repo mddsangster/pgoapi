@@ -96,30 +96,20 @@ class PoGoBot(object):
         if ret and ret["responses"]:
             self.process_player(ret["responses"]["GET_PLAYER"])
             self.process_inventory(ret["responses"]["GET_INVENTORY"])
-        else:
-            ret = None
-        time.sleep(delay)
-        return ret
 
     def get_hatched_eggs(self, delay):
         sys.stdout.write("Getting hatched eggs...\n")
         ret = self.api.get_hatched_eggs()
         if ret and ret["responses"]:
             pass#print(ret["responses"]["GET_HATCHED_EGGS"])
-        else:
-            ret = None
         time.sleep(delay)
-        return ret
 
     def get_rewards(self, delay):
         sys.stdout.write("Getting level-up rewards...\n")
         ret = self.api.level_up_rewards(level=self.inventory["stats"]["level"])
         if ret and ret["responses"]:
             pass#print(ret["responses"]["LEVEL_UP_REWARDS"])
-        else:
-            ret = None
         time.sleep(delay)
-        return ret
 
     def get_cell_ids(self, lat, lng, radius=10):
         origin = CellId.from_lat_lng(LatLng.from_degrees(lat, lng)).parent(15)
@@ -148,11 +138,9 @@ class PoGoBot(object):
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
                         pois['forts'].append(fort)
-        else:
-            ret = None
         self.pois = pois
         time.sleep(delay)
-        return ret
+
 
     def spin_forts(self, delay):
         sys.stdout.write("Spinning forts...\n")
@@ -166,24 +154,22 @@ class PoGoBot(object):
                         self.spins.append(fort)
                         print(ret)
 
-    def catch_pokemon(self, eid, spid, pokemon, balls, delay):
+    def catch_pokemon(self, eid, spid, kind, pokemon, balls, delay):
         while True:
             normalized_reticle_size = 1.950 - random.uniform(0, .5)
             normalized_hit_position = 1.0
             spin_modifier = 1.0 - random.uniform(0, .1)
             if len(balls) == 0:
-                ret = None
                 break
             ret = self.api.catch_pokemon(encounter_id=eid, spawn_point_id=spid, pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
             time.sleep(delay)
             if "status" in ret["responses"]["CATCH_POKEMON"]:
                 if ret["responses"]["CATCH_POKEMON"]["status"] == 1:
                     self.catches.append(pokemon)
-                    print(ret)
+                    print(kind, ret)
                     break
                 elif ret["responses"]["CATCH_POKEMON"]["status"] == 0 or ret["responses"]["CATCH_POKEMON"]["status"] == 3:
                     break
-        return ret
 
     def catch_wild_pokemon(self, delay):
         sys.stdout.write("Catching wild pokemon...\n")
@@ -191,15 +177,27 @@ class PoGoBot(object):
         for pokemon in self.pois["pokemon"]:
             ret = self.api.encounter(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
             time.sleep(delay)
-            self.catch_pokemon(pokemon['encounter_id'], pokemon['spawn_point_id'], pokemon, self.balls, delay)
+            self.catch_pokemon(pokemon['encounter_id'], pokemon['spawn_point_id'], "wild", pokemon, self.balls, delay)
+
+    def catch_incense_pokemon(self, delay):
+        sys.stdout.write("Catching incense pokemon...\n")
+        lat, lng, alt = self.api.get_position()
+        ret = self.api.get_incense_pokemon(player_latitude=lat, player_longitude=lng)
+        time.sleep(delay)
+        if ret and "GET_INCENSE_POKEMON" in ret["responses"] and ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
+            pokemon = ret["responses"]["GET_INCENSE_POKEMON"]
+            ret = api.incense_encounter(encounter_id=pokemon["encounter_id"], encounter_location=pokemon["encounter_location"])
+            time.sleep(delay)
+            if ret and "INCENSE_ENCOUNTER" in enc["responses"] and ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 1:
+                self.catch_pokemon(pokemon["encounter_id"], pokemon["encounter_location"], "incense", pokemon, self.balls, delay)
 
     def move(self, mph=5):
         sys.stdout.write("Moving...\n")
         now = time.time()
         delta = now - self.last_move_time
         if now > self.change_dir_time:
-            self.angle = random.uniform(0,360)
-            self.change_dir_time = now + random.uniform(60,300)
+            self.angle = (self.angle + random.gauss(45,30)) % 360
+            self.change_dir_time = now + 60 + random.gauss(120,60)
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
         lat += math.cos(self.angle)*r
@@ -228,8 +226,22 @@ class PoGoBot(object):
         with open("config.json", "w") as out:
             json.dump(self.config, out, indent=2, sort_keys=True)
 
+    def load_incubators(self):
+        for ib in self.inventory["incubators"]:
+            if not 'pokemon_id' in ib:
+                ib = self.inventory["incubators"][ib]
+                if len(self.inventory["eggs"]) > 0:
+                    bestegg = (None,0)
+                    for egg in self.inventory["eggs"]:
+                        egg = self.inventory["eggs"][egg]
+                        if egg["egg_km_walked_target"] > bestegg[1]:
+                            bestegg = (egg, egg["egg_km_walked_target"])
+                    ret = self.api.use_item_egg_incubator(item_id=ib['id'], pokemon_id=bestegg[0]['id'])
+                    if ret and "USE_ITEM_EGG_INCUBATOR" in ret['responses'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
+                        print(ret)
+
     def play(self):
-        delay = .4
+        delay = 1
         while True:
             self.get_hatched_eggs(delay)
             self.get_trainer_info(delay)
@@ -237,6 +249,8 @@ class PoGoBot(object):
             self.get_pois(delay)
             self.spin_forts(delay)
             self.catch_wild_pokemon(delay)
+            self.catch_incense_pokemon(delay)
+            self.load_incubators()
             self.save_map()
             self.move()
             self.save_config()
