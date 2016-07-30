@@ -24,6 +24,8 @@ class PoGoBot(object):
 
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/pokemon.json"), "r") as infile:
             self.pokemon_info = json.load(infile)
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/items.json"), "r") as infile:
+            self.item_names = json.load(infile)
 
         self.coords = [{'latitude': self.config["location"][0], 'longitude': self.config["location"][1]}]
         self.catches = []
@@ -57,6 +59,19 @@ class PoGoBot(object):
 
     def process_player(self, player):
         self.player = player["player_data"]
+
+    def prune_inventory(self, delay):
+        sys.stdout.write("Pruning inventory...\n")
+        for il in self.config["inventory_limits"]:
+            if il in self.inventory["items"] and self.inventory["items"][il] > self.config["inventory_limits"][il]:
+                count = self.inventory["items"][il] - self.config["inventory_limits"][il]
+                ret = self.api.recycle_inventory_item(item_id=int(il), count=count)
+                time.sleep(delay)
+                if ret and "RECYCLE_INVENTORY_ITEM" in ret['responses'] and ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
+                    pl = ""
+                    if count > 1:
+                        pl = "s"
+                    sys.stdout.write("  Recycled %d %s%s...\n" % (count, self.item_names[il], pl))
 
     def process_inventory(self, inventory):
         ni = {
@@ -272,6 +287,7 @@ class PoGoBot(object):
             self.catch_wild_pokemon(delay)
             self.catch_incense_pokemon(delay)
             self.load_incubators()
+            self.prune_inventory(delay)
             self.save_map()
             self.move()
             self.save_config()
