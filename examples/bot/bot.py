@@ -227,6 +227,7 @@ class PoGoBot(object):
             json.dump(self.config, out, indent=2, sort_keys=True)
 
     def load_incubators(self):
+        sys.stdout.write("Loading incubators...\n")
         for ib in self.inventory["incubators"]:
             if not 'pokemon_id' in ib:
                 ib = self.inventory["incubators"][ib]
