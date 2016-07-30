@@ -304,5 +304,5 @@ class PoGoBot(object):
             self.load_incubators()
             self.prune_inventory(delay)
             self.save_map()
-            self.move()
+            self.move(self.config["speed"])
             self.save_config()
