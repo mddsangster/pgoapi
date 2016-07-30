@@ -88,7 +88,7 @@ class PoGoBot(object):
         self.inventory = ni
 
     def get_trainer_info(self, delay):
-        sys.stdout.write("Getting training information...\n")
+        sys.stdout.write("Getting trainer information...\n")
         req = self.api.create_request()
         req.get_player()
         req.get_inventory()
