@@ -71,7 +71,7 @@ class PoGoBot(object):
                     pl = ""
                     if count > 1:
                         pl = "s"
-                    sys.stdout.write("  Recycled %d %s%s...\n" % (count, self.item_names[il], pl))
+                    sys.stdout.write("  Recycled %d %s%s\n" % (count, self.item_names[il], pl))
 
     def process_inventory(self, inventory):
         ni = {
@@ -231,8 +231,8 @@ class PoGoBot(object):
         now = time.time()
         delta = now - self.last_move_time
         if now > self.change_dir_time:
-            self.angle = (self.angle + random.gauss(45,30)) % 360
-            self.change_dir_time = now + 120 + random.gauss(300,90)
+            self.angle = (self.angle + random.uniform(45,135)) % 360
+            self.change_dir_time = now + 300 + random.gauss(300,120)
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
         lat += math.cos(self.angle)*r
