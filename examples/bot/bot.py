@@ -22,12 +22,18 @@ class PoGoBot(object):
         self.api.set_position(*self.config["location"])
         self.angle = random.uniform(0,360)
 
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/pokemon.json"), "r") as infile:
+            self.pokemon_info = json.load(infile)
+
         self.coords = [{'latitude': self.config["location"][0], 'longitude': self.config["location"][1]}]
         self.catches = []
         self.spins = []
 
         self.last_move_time = time.time()
         self.change_dir_time = self.last_move_time + random.uniform(60,300)
+
+    def pokemon_id_to_name(self, id):
+        return (list(filter(lambda j: int(j['Number']) == id, self.pokemon_info))[0]['Name'])
 
     def login(self, retries=-1):
         ret = False
@@ -152,7 +158,11 @@ class PoGoBot(object):
                     time.sleep(delay)
                     if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
                         self.spins.append(fort)
-                        print(ret)
+                        sys.stdout.write("  Spun fort and got:\n")
+                        sys.stdout.write("    Experience: %d\n" % ret["responses"]["FORT_SEARCH"]["experience_awarded"])
+                        sys.stdout.write("    Items:\n")
+                        for item in ret["responses"]["FORT_SEARCH"]["items_awarded"]:
+                            sys.stdout.write("      %d x Item %d\n" % (item["item_count"], item["item_id"]))
 
     def catch_pokemon(self, eid, spid, kind, pokemon, balls, delay):
         while True:
@@ -166,7 +176,10 @@ class PoGoBot(object):
             if "status" in ret["responses"]["CATCH_POKEMON"]:
                 if ret["responses"]["CATCH_POKEMON"]["status"] == 1:
                     self.catches.append(pokemon)
-                    print(kind, ret)
+                    sys.stdout.write("  Caught a %s %s and got:\n" % (kind, self.pokemon_id_to_name(pokemon["pokemon_data"]["pokemon_id"])))
+                    sys.stdout.write("    Experience: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["xp"]))
+                    sys.stdout.write("    Stardust: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["stardust"]))
+                    sys.stdout.write("    Candies: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["candy"]))
                     break
                 elif ret["responses"]["CATCH_POKEMON"]["status"] == 0 or ret["responses"]["CATCH_POKEMON"]["status"] == 3:
                     break
@@ -242,7 +255,7 @@ class PoGoBot(object):
                         print(ret)
 
     def play(self):
-        delay = 1
+        delay = 2
         while True:
             self.get_hatched_eggs(delay)
             self.get_trainer_info(delay)
