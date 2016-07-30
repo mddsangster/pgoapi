@@ -183,8 +183,14 @@ class PoGoBot(object):
                         sys.stdout.write("  Spun fort and got:\n")
                         sys.stdout.write("    Experience: %d\n" % ret["responses"]["FORT_SEARCH"]["experience_awarded"])
                         sys.stdout.write("    Items:\n")
+                        ni = {}
                         for item in ret["responses"]["FORT_SEARCH"]["items_awarded"]:
-                            sys.stdout.write("      %d x Item %d\n" % (item["item_count"], item["item_id"]))
+                            if not item["item_id"] in ni:
+                                ni[item["item_id"]] = 1
+                            else:
+                                ni[item["item_id"]] += 1
+                        for item in ni:
+                            sys.stdout.write("      %d x Item %d\n" % (ni[item], item))
 
     def catch_pokemon(self, eid, spid, kind, pokemon, balls, delay):
         while True:
