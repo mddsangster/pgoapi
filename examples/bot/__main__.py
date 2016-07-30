@@ -33,6 +33,7 @@ def init_config():
     parser.add_argument("-p", "--password", help="Password")
     parser.add_argument("-l", "--location", help="Location", required=required("location"))
     parser.add_argument("-k", "--key", help="Google Maps API Key", required=required("key"))
+    parser.add_argument("-s", "--speed", type=int, help="Travel speed in miles per hour", required=required("speed"))
     parser.add_argument("-q", "--powerquotient", type=int, help="Minimum power quotient for keeping pokemon")
     parser.add_argument("-d", "--debug", help="Debug Mode", action='store_true')
     parser.set_defaults(DEBUG=False, powerquotient=0)
