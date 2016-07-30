@@ -102,6 +102,11 @@ class PoGoBot(object):
         if ret and ret["responses"]:
             self.process_player(ret["responses"]["GET_PLAYER"])
             self.process_inventory(ret["responses"]["GET_INVENTORY"])
+        sys.stdout.write("  Trainer level: %d\n" % self.inventory["stats"]["level"])
+        sys.stdout.write("  Experience: %d\n" % self.inventory["stats"]["experience"])
+        sys.stdout.write("  Next level experience needed: %d\n" % (self.inventory["stats"]["next_level_xp"]-self.inventory["stats"]["experience"]))
+        sys.stdout.write("  Kilometers walked: %.2f\n" % self.inventory["stats"]["km_walked"])
+        sys.stdout.write("  Stardust: %d\n" % [cur["amount"] for cur in self.player["currencies"] if cur["name"] == "STARDUST"][0])
 
     def get_hatched_eggs(self, delay):
         sys.stdout.write("Getting hatched eggs...\n")
@@ -210,7 +215,7 @@ class PoGoBot(object):
         delta = now - self.last_move_time
         if now > self.change_dir_time:
             self.angle = (self.angle + random.gauss(45,30)) % 360
-            self.change_dir_time = now + 60 + random.gauss(120,60)
+            self.change_dir_time = now + 120 + random.gauss(300,90)
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
         lat += math.cos(self.angle)*r
