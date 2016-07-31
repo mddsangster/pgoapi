@@ -374,7 +374,11 @@ class PoGoBot(object):
         for coord in self.coords:
             map.add_position((coord['latitude'], coord['longitude']))
         for catch in self.catches:
-            map.add_point((catch['latitude'], catch['longitude']), "http://pokeapi.co/media/sprites/pokemon/%d.png" % catch["pokemon_data"]["pokemon_id"])
+            if "pokemon_data" in catch:
+                pid = catch["pokemon_data"]["pokemon_id"]
+            else:
+                pid = catch["pokemon_id"]
+            map.add_point((catch['latitude'], catch['longitude']), "http://pokeapi.co/media/sprites/pokemon/%d.png" % pid)
         for spin in self.spins:
             map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
 
