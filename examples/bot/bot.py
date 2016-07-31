@@ -95,7 +95,7 @@ class PoGoBot(object):
             "pokemon": {},
             "eggs": [],
             "stats": {},
-            #"applied": {},
+            "applied": {},
             "incubators": {}
         }
         balls = []
@@ -124,6 +124,8 @@ class PoGoBot(object):
                     ni["incubators"][str(incubator["id"])] = incubator
             elif "player_stats" in item:
                 ni["stats"] = item["player_stats"]
+            else:
+                pass
         self.balls = sorted(balls)
         if self.config["best_balls_first"]:
             self.balls = self.balls[::-1]
@@ -178,7 +180,15 @@ class PoGoBot(object):
         sys.stdout.write("Getting level-up rewards...\n")
         ret = self.api.level_up_rewards(level=self.inventory["stats"]["level"])
         if self.check_status_code(ret, 1) and ret["responses"]["LEVEL_UP_REWARDS"]["result"] == 1:
-            print(ret)
+            sys.stdout.write("  Items:\n")
+            ni = {}
+            for item in ret["responses"]["LEVEL_UP_REWARDS"]["items_awarded"]:
+                if not item["item_id"] in ni:
+                    ni[item["item_id"]] = 1
+                else:
+                    ni[item["item_id"]] += 1
+            for item in ni:
+                sys.stdout.write("    %d x %s\n" % (ni[item], self.item_names[str(item)]))
         time.sleep(delay)
 
     def get_cell_ids(self, lat, lng, radius=10):
@@ -330,7 +340,7 @@ class PoGoBot(object):
         for spin in self.spins:
             map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
 
-        with open("%s.html" % self.player["username"], "w") as out:
+        with open("maptrace.html", "w") as out:
             print(map, file=out)
 
     def save_config(self):
@@ -385,6 +395,7 @@ class PoGoBot(object):
                     sys.stdout.write("    %d x %s\n" % (deficit, self.pokemon_id_to_name(self.family_ids[str(family)])))
 
     def transfer_pokemon(self, delay):
+        t = 0
         if (sum([len(p) for p in self.inventory["pokemon"]]) + sum([len(p) for p in self.inventory["eggs"]])) > self.config["minpokemon"]:
             sys.stdout.write("Transfering pokemon...\n")
             transferable_pokemon = []
@@ -406,7 +417,9 @@ class PoGoBot(object):
                 ret = self.api.release_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
                 if ret and "RELEASE_POKEMON" in ret['responses'] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
                     sys.stdout.write("    A %s with a power quotient of %d was released.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])]), pq))
+                    t += 1
                 time.sleep(delay)
+        return t
 
     def evolve_pokemon(self, delay):
         e = 0
@@ -418,41 +431,50 @@ class PoGoBot(object):
                     while evos > 0 and len(self.inventory["pokemon"][family]) > 0:
                         evolveable_pokemon.append(self.inventory["pokemon"][family].pop())
                         evos -= 1
-            sys.stdout.write("  There are %d evolveable pokemon...\n" & len(evolveable_pokemon))
-            sys.exit()
+            sys.stdout.write("  There are %d evolveable pokemon...\n" % len(evolveable_pokemon))
+            if len(evolveable_pokemon) > 100 and "301" in self.inventory["items"]:
+                sys.stdout.write("  Using a lucky egg...")
+                ret = self.api.use_item_xp_boost(item_id=301)
+                if self.check_status_code(ret, 1) and ret["responses"]["USE_ITEM_XP_BOOST"]["result"] == 1:
+                    sys.stdout.write("success.\n")
+                else:
+                    sys.stdout.write("failed.\n")
+                time.sleep(delay)
             for pokemon in evolveable_pokemon:
                 ret = self.api.evolve_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
                 if self.check_status_code(ret, 1) and ret["responses"]["EVOLVE_POKEMON"]["result"] == 1:
                     sys.stdout.write("    A %s was evolved.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])])))
+                    sys.stdout.write("      Experience: %d\n" % ret["responses"]["EVOLVE_POKEMON"]["experience_awarded"])
                     e += 1
                 time.sleep(delay)
         return e
 
     def play(self):
-        delay = 5
+        delay = 1
         while True:
-            skipmove = 0
             self.save_config()
+            self.save_map()
             self.get_hatched_eggs(delay)
             self.get_trainer_info(delay)
             self.get_rewards(delay)
+            self.process_candies()
+            if self.evolve_pokemon(delay):
+                self.last_move_time = time.time()
+                continue
+            if self.config["minpokemon"] >= 0:
+                if self.transfer_pokemon(delay):
+                    self.last_move_time = time.time()
+                    continue
             self.get_pois(delay)
             if not self.config["nospin"]:
-                self.spin_forts(delay)
+                self.spin_forts(5)
             if not self.config["nocatch"]:
                 self.catch_wild_pokemon(delay)
                 self.catch_incense_pokemon(delay)
             self.load_incubators()
             self.prune_inventory(delay)
-            self.process_candies()
-            if self.config["minpokemon"] >= 0:
-                self.transfer_pokemon(delay)
-            skipmove += self.evolve_pokemon(delay)
-            self.save_map()
-            if skipmove == 0:
-                self.move(self.config["speed"])
-            else:
-                self.last_move_time = time.time()
+            self.move(self.config["speed"])
+            time.sleep(10)
 
     def run(self):
         while True:
