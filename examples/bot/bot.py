@@ -9,6 +9,7 @@ import random
 
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../.."))
 from pgoapi import pgoapi
+import pgoapi.exceptions
 
 from s2sphere import CellId, LatLng
 
@@ -26,6 +27,10 @@ class PoGoBot(object):
             self.pokemon_info = json.load(infile)
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/items.json"), "r") as infile:
             self.item_names = json.load(infile)
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/family_ids.json"), "r") as infile:
+            self.family_ids = json.load(infile)
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/evoreq.json"), "r") as infile:
+            self.evoreq = json.load(infile)
 
         self.coords = [{'latitude': self.config["location"][0], 'longitude': self.config["location"][1]}]
         self.catches = []
@@ -74,13 +79,15 @@ class PoGoBot(object):
                         first = False
                     sys.stdout.write("    %d x %s\n" % (count, self.item_names[il]))
 
+    def get_key_from_pokemon(self, pokemon):
+        return '{}-{}'.format(pokemon['pokemon_data']['captured_cell_id'], pokemon['pokemon_data']['pokemon_id'])
+
     def process_inventory(self, inventory):
         ni = {
             "items": {},
             "candies": {},
             "pokemon": {},
             "eggs": {},
-            #"pokedex": {},
             "stats": {},
             #"applied": {},
             "incubators": {}
@@ -100,7 +107,10 @@ class PoGoBot(object):
                 if "is_egg" in item["pokemon_data"] and item["pokemon_data"]["is_egg"]:
                     ni["eggs"][str(item["pokemon_data"]["id"])] = item["pokemon_data"]
                 else:
-                    ni["pokemon"][str(item["pokemon_data"]["id"])] = item["pokemon_data"]
+                    fam = str(item["pokemon_data"]["pokemon_id"])
+                    if not fam in ni["pokemon"]:
+                        ni["pokemon"][fam] = {}
+                    ni["pokemon"][fam][self.get_key_from_pokemon(item)] = item
             elif "egg_incubators" in item:
                 for incubator in item["egg_incubators"]["egg_incubator"]:
                     ni["incubators"][str(incubator["id"])] = incubator
@@ -291,6 +301,57 @@ class PoGoBot(object):
                     if ret and "USE_ITEM_EGG_INCUBATOR" in ret['responses'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
                         print(ret)
 
+    def calc_pq(self, pokemon):
+        pq = 0
+        for iv in ["individual_attack", "individual_defense", "individual_stamina"]:
+            if iv in pokemon["pokemon_data"]:
+                pq += pokemon["pokemon_data"][iv]
+        return int(round(pq/45.0,2)*100)
+
+    def process_candies(self):
+        sys.stdout.write("Processing candies...\n")
+        self.enabled_evolutions = {}
+        self.pokemon_deficit = {}
+        if len(self.inventory["candies"]) > 0:
+            for family, count in self.inventory["candies"].iteritems():
+                if family in self.evoreq:
+                    evos, extra = divmod(count, self.evoreq[family])
+                    if evos > 0:
+                        self.enabled_evolutions[family] = evos
+                        if not family in self.inventory["pokemon"]:
+                            self.pokemon_deficit[family] = evos
+                        else:
+                            self.pokemon_deficit[family] = evos - len(self.inventory["pokemon"][family])
+            if len(self.enabled_evolutions.keys()) > 0:
+                sys.stdout.write("  Enabled evolutions:\n")
+                for family, evos in self.enabled_evolutions.iteritems():
+                    sys.stdout.write("    %d x %s\n" % (evos, self.pokemon_id_to_name(self.family_ids[str(family)])))
+            if len(self.pokemon_deficit.keys()) > 0:
+                sys.stdout.write("  Pokemon evolution deficit:\n")
+                for family, deficit in self.pokemon_deficit.iteritems():
+                    sys.stdout.write("    %d x %s\n" % (deficit, self.pokemon_id_to_name(self.family_ids[str(family)])))
+
+    def transfer_pokemon(self, delay):
+        sys.stdout.write("Transfering pokemon...\n")
+        transferable_pokemon = []
+        for family in self.inventory["pokemon"]:
+            count = 0
+            for pid in self.inventory["pokemon"][family]:
+                pokemon = self.inventory["pokemon"][family][pid]
+                pq = self.calc_pq(pokemon)
+                if pq < self.config["powerquotient"]:
+                    if self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])] != pokemon["pokemon_data"]["pokemon_id"]:
+                        transferable_pokemon.append((pokemon, pq))
+                    elif family in self.pokemon_deficit:
+                        if self.pokemon_deficit[family] < 0 and count < abs(self.pokemon_deficit[family]):
+                            transferable_pokemon.append((pokemon, pq))
+                            count += 1
+        for pokemon, pq in transferable_pokemon:
+            ret = self.api.release_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
+            time.sleep(delay)
+            if ret and "RELEASE_POKEMON" in ret['responses'] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
+                sys.stdout.write("    A %s with a power quotient of %d was released.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])]), pq))
+
     def play(self):
         delay = 2
         while True:
@@ -303,6 +364,16 @@ class PoGoBot(object):
             self.catch_incense_pokemon(delay)
             self.load_incubators()
             self.prune_inventory(delay)
+            self.process_candies()
+            self.transfer_pokemon(delay)
             self.save_map()
             self.move(self.config["speed"])
             self.save_config()
+
+    def run(self):
+        while True:
+            try:
+                self.login()
+                self.play()
+            except pgoapi.exceptions.NotLoggedInException:
+                pass
