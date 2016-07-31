@@ -79,15 +79,12 @@ class PoGoBot(object):
                         first = False
                     sys.stdout.write("    %d x %s\n" % (count, self.item_names[il]))
 
-    def get_key_from_pokemon(self, pokemon):
-        return '{}-{}'.format(pokemon['pokemon_data']['captured_cell_id'], pokemon['pokemon_data']['pokemon_id'])
-
     def process_inventory(self, inventory):
         ni = {
             "items": {},
             "candies": {},
             "pokemon": {},
-            "eggs": {},
+            "eggs": [],
             "stats": {},
             #"applied": {},
             "incubators": {}
@@ -105,12 +102,12 @@ class PoGoBot(object):
                     ni["candies"][str(item["candy"]["family_id"])] = item["candy"]["candy"]
             elif "pokemon_data" in item:
                 if "is_egg" in item["pokemon_data"] and item["pokemon_data"]["is_egg"]:
-                    ni["eggs"][str(item["pokemon_data"]["id"])] = item["pokemon_data"]
+                    ni["eggs"].append(item["pokemon_data"])
                 else:
                     fam = str(item["pokemon_data"]["pokemon_id"])
                     if not fam in ni["pokemon"]:
-                        ni["pokemon"][fam] = {}
-                    ni["pokemon"][fam][self.get_key_from_pokemon(item)] = item
+                        ni["pokemon"][fam] = []
+                    ni["pokemon"][fam].append(item)
             elif "egg_incubators" in item:
                 for incubator in item["egg_incubators"]["egg_incubator"]:
                     ni["incubators"][str(incubator["id"])] = incubator
@@ -256,8 +253,8 @@ class PoGoBot(object):
         now = time.time()
         delta = now - self.last_move_time
         if now > self.change_dir_time:
-            self.angle = (self.angle + random.uniform(45,135)) % 360
-            self.change_dir_time = now + 300 + random.gauss(300,120)
+            self.angle = (self.angle + random.uniform(95,135)) % 360
+            self.change_dir_time = now + 120 + random.uniform(30,90)
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
         lat += math.cos(self.angle)*r
@@ -294,7 +291,6 @@ class PoGoBot(object):
                 if len(self.inventory["eggs"]) > 0:
                     bestegg = (None,0)
                     for egg in self.inventory["eggs"]:
-                        egg = self.inventory["eggs"][egg]
                         if egg["egg_km_walked_target"] > bestegg[1]:
                             bestegg = (egg, egg["egg_km_walked_target"])
                     ret = self.api.use_item_egg_incubator(item_id=ib['id'], pokemon_id=bestegg[0]['id'])
@@ -334,18 +330,20 @@ class PoGoBot(object):
     def transfer_pokemon(self, delay):
         sys.stdout.write("Transfering pokemon...\n")
         transferable_pokemon = []
-        for family in self.inventory["pokemon"]:
+        for pid in self.inventory["pokemon"]:
             count = 0
-            for pid in self.inventory["pokemon"][family]:
-                pokemon = self.inventory["pokemon"][family][pid]
+            for pokemon in self.inventory["pokemon"][pid]:
                 pq = self.calc_pq(pokemon)
                 if pq < self.config["powerquotient"]:
-                    if self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])] != pokemon["pokemon_data"]["pokemon_id"]:
+                    if pid in self.pokemon_deficit:
+                        if self.pokemon_deficit[pid] < 0:
+                            if count < abs(self.pokemon_deficit[pid]):
+                                transferable_pokemon.append((pokemon, pq))
+                                count += 1
+                            else:
+                                break
+                    else:
                         transferable_pokemon.append((pokemon, pq))
-                    elif family in self.pokemon_deficit:
-                        if self.pokemon_deficit[family] < 0 and count < abs(self.pokemon_deficit[family]):
-                            transferable_pokemon.append((pokemon, pq))
-                            count += 1
         for pokemon, pq in transferable_pokemon:
             ret = self.api.release_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
             time.sleep(delay)
