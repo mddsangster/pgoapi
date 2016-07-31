@@ -131,8 +131,7 @@ class PoGoBot(object):
             self.balls = self.balls[::-1]
         self.inventory = ni
 
-    def get_trainer_info(self, delay):
-        sys.stdout.write("Getting trainer information...\n")
+    def get_trainer_info(self, hatched, delay):
         req = self.api.create_request()
         req.get_player()
         req.get_inventory()
@@ -140,6 +139,16 @@ class PoGoBot(object):
         if ret and ret["responses"]:
             self.process_player(ret["responses"]["GET_PLAYER"])
             self.process_inventory(ret["responses"]["GET_INVENTORY"])
+        if hatched:
+            pokemon, startdust, candy, xp = hatched
+            sys.stdout.write("  Hatched %d eggs:...\n")
+            sys.stdout.write("    Pokemon:\n")
+            for p in pokemon:
+                sys.stdout.write("      %s\n" % p)
+            sys.stdout.write("    Experience: %d\n" % xp)
+            sys.stdout.write("    Stardust: %d\n" % stardust)
+            sys.stdout.write("    Candy: %d\n" % candy)
+        sys.stdout.write("Getting trainer information...\n")
         sys.stdout.write("  Trainer level: %d\n" % self.inventory["stats"]["level"])
         sys.stdout.write("  Experience: %d\n" % self.inventory["stats"]["experience"])
         sys.stdout.write("  Next level experience needed: %d\n" % (self.inventory["stats"]["next_level_xp"]-self.inventory["stats"]["experience"]))
@@ -170,11 +179,23 @@ class PoGoBot(object):
         return (r and "status_code" in r and r["status_code"] == c)
 
     def get_hatched_eggs(self, delay):
+        pokemon = []
+        stardust = 0
+        candy = 0
+        xp = 0
         sys.stdout.write("Getting hatched eggs...\n")
         ret = self.api.get_hatched_eggs()
-        if self.check_status_code(ret, 1):
-            print(ret)
+        if self.check_status_code(ret, 1) and 'pokemon_id' in ret["responses"]["GET_HATCHED_EGGS"]:
+            hatched = (
+                ret["responses"]["GET_HATCHED_EGGS"]["pokemon_id"],
+                ret["responses"]["GET_HATCHED_EGGS"]["stardust_awarded"],
+                ret["responses"]["GET_HATCHED_EGGS"]["candy_awarded"],
+                ret["responses"]["GET_HATCHED_EGGS"]["experience_awarded"]
+            )
+        else:
+            hatched = None
         time.sleep(delay)
+        return hatched
 
     def get_rewards(self, delay):
         sys.stdout.write("Getting level-up rewards...\n")
@@ -232,16 +253,21 @@ class PoGoBot(object):
                     if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
                         self.spins.append(fort)
                         sys.stdout.write("  Spun fort and got:\n")
-                        sys.stdout.write("    Experience: %d\n" % ret["responses"]["FORT_SEARCH"]["experience_awarded"])
-                        sys.stdout.write("    Items:\n")
-                        ni = {}
-                        for item in ret["responses"]["FORT_SEARCH"]["items_awarded"]:
-                            if not item["item_id"] in ni:
-                                ni[item["item_id"]] = 1
-                            else:
-                                ni[item["item_id"]] += 1
-                        for item in ni:
-                            sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
+                        if "experience_awarded" in ret["responses"]["FORT_SEARCH"]:
+                            xp = ret["responses"]["FORT_SEARCH"]["experience_awarded"]
+                        else:
+                            xp = 0
+                        sys.stdout.write("    Experience: %d\n" % xp)
+                        if "items_awarded" in ret["responses"]["FORT_SEARCH"]:
+                            sys.stdout.write("    Items:\n")
+                            ni = {}
+                            for item in ret["responses"]["FORT_SEARCH"]["items_awarded"]:
+                                if not item["item_id"] in ni:
+                                    ni[item["item_id"]] = 1
+                                else:
+                                    ni[item["item_id"]] += 1
+                            for item in ni:
+                                sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
                     time.sleep(delay)
 
     def catch_pokemon(self, eid, spid, kind, pokemon, balls, delay):
@@ -449,13 +475,18 @@ class PoGoBot(object):
                 time.sleep(delay)
         return e
 
+    def kill_time(self, delay):
+        sys.stdout.write("Killing time...\n")
+        time.sleep(delay)
+
     def play(self):
         delay = 1
         while True:
             self.save_config()
             self.save_map()
-            self.get_hatched_eggs(delay)
-            self.get_trainer_info(delay)
+            hatched = self.get_hatched_eggs(delay)
+            self.get_trainer_info(hatched, delay)
+            self.kill_time(5)
             self.get_rewards(delay)
             self.process_candies()
             if self.evolve_pokemon(delay):
@@ -465,6 +496,7 @@ class PoGoBot(object):
                 if self.transfer_pokemon(delay):
                     self.last_move_time = time.time()
                     continue
+            self.kill_time(5)
             self.get_pois(delay)
             if not self.config["nospin"]:
                 self.spin_forts(5)
@@ -474,7 +506,6 @@ class PoGoBot(object):
             self.load_incubators()
             self.prune_inventory(delay)
             self.move(self.config["speed"])
-            time.sleep(10)
 
     def run(self):
         while True:
