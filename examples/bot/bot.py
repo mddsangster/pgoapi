@@ -172,7 +172,7 @@ class PoGoBot(object):
             if first:
                 sys.stdout.write("  Inventory:\n")
                 first = False
-            sys.stdout.write("      %d x %s\n" % (self.inventory["items"][i], self.item_names[str(i)]))
+            sys.stdout.write("    %d x %s\n" % (self.inventory["items"][i], self.item_names[str(i)]))
 
     def check_status_code(self, r, c):
         return (r and "status_code" in r and r["status_code"] == c)
