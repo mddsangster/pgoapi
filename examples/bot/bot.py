@@ -131,7 +131,7 @@ class PoGoBot(object):
         sys.stdout.write("  Kilometers walked: %.2f\n" % self.inventory["stats"]["km_walked"])
         sys.stdout.write("  Stardust: %d\n" % [cur["amount"] for cur in self.player["currencies"] if cur["name"] == "STARDUST"][0])
         sys.stdout.write("  Item storage: %d/%d\n" % (sum(self.inventory["items"].values()), self.player["max_item_storage"]))
-        sys.stdout.write("  Pokemon storage: %d/%d\n" % ((len(self.inventory["pokemon"]) + len(self.inventory["eggs"])), self.player["max_pokemon_storage"]))
+        sys.stdout.write("  Pokemon storage: %d/%d\n" % (sum([len(p) for p in self.inventory["pokemon"]]) + sum([len(p) for p in self.inventory["eggs"]]), self.player["max_pokemon_storage"]))
         first = True
         for ib in self.inventory["incubators"]:
             if 'pokemon_id' in self.inventory["incubators"][ib]:
