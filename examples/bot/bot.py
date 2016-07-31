@@ -96,7 +96,7 @@ class PoGoBot(object):
             "eggs": [],
             "stats": {},
             "applied": {},
-            "incubators": {}
+            "incubators": []
         }
         balls = []
         mon = 0
@@ -121,7 +121,7 @@ class PoGoBot(object):
                     ni["pokemon"][fam].append(item)
             elif "egg_incubators" in item:
                 for incubator in item["egg_incubators"]["egg_incubator"]:
-                    ni["incubators"][str(incubator["id"])] = incubator
+                    ni["incubators"].append(incubator)
             elif "player_stats" in item:
                 ni["stats"] = item["player_stats"]
             else:
@@ -140,14 +140,14 @@ class PoGoBot(object):
             self.process_player(ret["responses"]["GET_PLAYER"])
             self.process_inventory(ret["responses"]["GET_INVENTORY"])
         if hatched:
-            pokemon, startdust, candy, xp = hatched
+            pokemon, stardust, candy, xp = hatched
             sys.stdout.write("  Hatched %d eggs:...\n")
             sys.stdout.write("    Pokemon:\n")
             for p in pokemon:
                 sys.stdout.write("      %s\n" % p)
-            sys.stdout.write("    Experience: %d\n" % xp)
-            sys.stdout.write("    Stardust: %d\n" % stardust)
-            sys.stdout.write("    Candy: %d\n" % candy)
+            sys.stdout.write("    Experience: %d\n" % sum(xp))
+            sys.stdout.write("    Stardust: %d\n" % sum(stardust))
+            sys.stdout.write("    Candy: %d\n" % sum(candy))
         sys.stdout.write("Getting trainer information...\n")
         sys.stdout.write("  Trainer level: %d\n" % self.inventory["stats"]["level"])
         sys.stdout.write("  Experience: %d\n" % self.inventory["stats"]["experience"])
@@ -161,11 +161,10 @@ class PoGoBot(object):
         sys.stdout.write("  Egg storage: %d/%d\n" % (len(self.inventory["eggs"]), 9))
         first = True
         for ib in self.inventory["incubators"]:
-            if 'pokemon_id' in self.inventory["incubators"][ib]:
+            if 'pokemon_id' in ib:
                 if first:
                     sys.stdout.write("  Loaded incubators:\n")
                     first = False
-                ib = self.inventory["incubators"][ib]
                 sys.stdout.write("    Remaining km: %f\n" % (ib["target_km_walked"]-self.inventory["stats"]["km_walked"]))
         sys.stdout.write("  Item storage: %d/%d\n" % (sum(self.inventory["items"].values()), self.player["max_item_storage"]))
         first = True
@@ -379,16 +378,19 @@ class PoGoBot(object):
     def load_incubators(self):
         sys.stdout.write("Loading incubators...\n")
         for ib in self.inventory["incubators"]:
-            if not 'pokemon_id' in self.inventory["incubators"][ib]:
-                ib = self.inventory["incubators"][ib]
+            if not 'pokemon_id' in ib:
                 if len(self.inventory["eggs"]) > 0:
-                    bestegg = (None,0)
-                    for egg in self.inventory["eggs"]:
-                        if egg["egg_km_walked_target"] > bestegg[1]:
-                            bestegg = (egg, egg["egg_km_walked_target"])
-                    ret = self.api.use_item_egg_incubator(item_id=ib['id'], pokemon_id=bestegg[0]['id'])
-                    if ret and "USE_ITEM_EGG_INCUBATOR" in ret['responses'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
-                        print(ret)
+                    bestegg = 0
+                    bestegg_idx = -1
+                    for i in xrange(len(self.inventory["eggs"])):
+                        if self.inventory["eggs"][i]["egg_km_walked_target"] > bestegg:
+                            bestegg = self.inventory["eggs"][i]["egg_km_walked_target"]
+                            bestegg_idx = i
+                    if bestegg_idx >= 0:
+                        egg = self.inventory["eggs"].pop(bestegg_idx)
+                        ret = self.api.use_item_egg_incubator(item_id=ib['id'], pokemon_id=egg['id'])
+                        if ret and "USE_ITEM_EGG_INCUBATOR" in ret['responses'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
+                            sys.stdout.write("  A %fkm egg was loaded.\n" % bestegg)
 
     def calc_pq(self, pokemon):
         pq = 0
@@ -498,8 +500,9 @@ class PoGoBot(object):
                     continue
             self.kill_time(5)
             self.get_pois(delay)
+            self.kill_time(5)
             if not self.config["nospin"]:
-                self.spin_forts(5)
+                self.spin_forts(1)
             if not self.config["nocatch"]:
                 self.catch_wild_pokemon(delay)
                 self.catch_incense_pokemon(delay)
