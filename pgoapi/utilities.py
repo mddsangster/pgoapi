@@ -91,5 +91,5 @@ def get_format_time_diff(low, high, ms = True):
     else:
         m, s = divmod(diff, 60)
     h, m = divmod(m, 60)
-    
+
     return (h, m, s)
