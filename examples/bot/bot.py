@@ -124,6 +124,8 @@ class PoGoBot(object):
                     ni["incubators"].append(incubator)
             elif "player_stats" in item:
                 ni["stats"] = item["player_stats"]
+            elif "applied_items" in item:
+                ni["applied"] = item["applied_items"]["item"]
             else:
                 pass
         self.balls = sorted(balls)
@@ -173,6 +175,12 @@ class PoGoBot(object):
                 sys.stdout.write("  Inventory:\n")
                 first = False
             sys.stdout.write("    %d x %s\n" % (self.inventory["items"][i], self.item_names[str(i)]))
+        first = True
+        for i in self.inventory["applied"]:
+            if first:
+                sys.stdout.write("  Applied items:\n")
+                first = False
+            sys.stdout.write("    %s has %.2f minutes left\n" % (self.item_names[str(i["item_id"])], ((i["expire_ms"]/1000)-time.time())/60))
 
     def check_status_code(self, r, c):
         return (r and "status_code" in r and r["status_code"] == c)
@@ -271,7 +279,11 @@ class PoGoBot(object):
 
     def catch_pokemon(self, eid, spid, kind, pokemon, balls, delay):
         ret = True
-        sys.stdout.write("  Encountered a %s %s...\n" % (kind, self.pokemon_id_to_name(pokemon["pokemon_data"]["pokemon_id"])))
+        if kind == "wild":
+            pid = pokemon["pokemon_data"]["pokemon_id"]
+        else:
+            pid = pokemon["pokemon_id"]
+        sys.stdout.write("  Encountered a %s %s...\n" % (kind, self.pokemon_id_to_name(pid)))
         minball = 1
         while True:
             normalized_reticle_size = 1.950 - random.uniform(0, .15)
@@ -334,8 +346,9 @@ class PoGoBot(object):
         time.sleep(delay)
         if ret and "GET_INCENSE_POKEMON" in ret["responses"] and ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
             pokemon = ret["responses"]["GET_INCENSE_POKEMON"]
-            ret = api.incense_encounter(encounter_id=pokemon["encounter_id"], encounter_location=pokemon["encounter_location"])
-            if ret and "INCENSE_ENCOUNTER" in enc["responses"] and ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 1:
+            ret = self.api.incense_encounter(encounter_id=pokemon["encounter_id"], encounter_location=pokemon["encounter_location"])
+            time.sleep(delay)
+            if self.check_status_code(ret, 1) and ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 1:
                 self.catch_pokemon(pokemon["encounter_id"], pokemon["encounter_location"], "incense", pokemon, self.balls, delay)
 
     def move(self, mph=5):
@@ -488,7 +501,6 @@ class PoGoBot(object):
             self.save_map()
             hatched = self.get_hatched_eggs(delay)
             self.get_trainer_info(hatched, delay)
-            self.kill_time(5)
             self.get_rewards(delay)
             self.process_candies()
             if self.evolve_pokemon(delay):
@@ -500,7 +512,7 @@ class PoGoBot(object):
                     continue
             self.kill_time(5)
             self.get_pois(delay)
-            self.kill_time(5)
+            self.kill_time(10)
             if not self.config["nospin"]:
                 self.spin_forts(1)
             if not self.config["nocatch"]:

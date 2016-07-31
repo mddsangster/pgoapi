@@ -95,7 +95,7 @@ def get_format_time_diff(low, high, ms = True):
     else:
         m, s = divmod(diff, 60)
     h, m = divmod(m, 60)
-    
+
     return (h, m, s)
 
 def parse_api_endpoint(api_url):
@@ -123,7 +123,7 @@ class Rand48(object):
         n = self.next() >> 16
         if n & (1 << 31):
             n -= 1 << 32
-        return n   
+        return n
 
 def long_to_bytes (val, endianness='big'):
     """
@@ -158,9 +158,9 @@ def long_to_bytes (val, endianness='big'):
         s = s[::-1]
 
     return s
-    
-    
-def generateLocation1(authticket, lat, lng, alt): 
+
+
+def generateLocation1(authticket, lat, lng, alt):
     firstHash = xxhash.xxh32(authticket, seed=0x1B845238).intdigest()
     locationBytes = d2h(lat) + d2h(lng) + d2h(alt)
     if not alt:
@@ -172,10 +172,10 @@ def generateLocation2(lat, lng, alt):
     if not alt:
         alt = "\x00\x00\x00\x00\x00\x00\x00\x00"
     return xxhash.xxh32(locationBytes, seed=0x1B845238).intdigest()      #Hash of location using static seed 0x1B845238
-    
+
 
 def generateRequestHash(authticket, request):
-    firstHash = xxhash.xxh64(authticket, seed=0x1B845238).intdigest()                      
+    firstHash = xxhash.xxh64(authticket, seed=0x1B845238).intdigest()
     return xxhash.xxh64(request, seed=firstHash).intdigest()
 
 
