@@ -80,13 +80,13 @@ class PoGoBot(object):
             if il in self.inventory["items"] and self.inventory["items"][il] > self.config[limit][il]:
                 count = self.inventory["items"][il] - self.config[limit][il]
                 ret = self.api.recycle_inventory_item(item_id=int(il), count=count)
-                time.sleep(delay)
                 if ret and "RECYCLE_INVENTORY_ITEM" in ret['responses'] and ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
                     if first:
                         sys.stdout.write("  %s max inventory...\n" % status)
                         sys.stdout.write("    Recycled:\n")
                         first = False
                     sys.stdout.write("      %d x %s\n" % (count, self.item_names[il]))
+                time.sleep(delay)
 
     def process_inventory(self, inventory):
         ni = {
@@ -99,6 +99,7 @@ class PoGoBot(object):
             "incubators": {}
         }
         balls = []
+        mon = 0
         for item in inventory["inventory_delta"]["inventory_items"]:
             item = item["inventory_item_data"]
             if "item" in item:
@@ -113,6 +114,7 @@ class PoGoBot(object):
                 if "is_egg" in item["pokemon_data"] and item["pokemon_data"]["is_egg"]:
                     ni["eggs"].append(item["pokemon_data"])
                 else:
+                    mon += 1
                     fam = str(item["pokemon_data"]["pokemon_id"])
                     if not fam in ni["pokemon"]:
                         ni["pokemon"][fam] = []
@@ -123,6 +125,8 @@ class PoGoBot(object):
             elif "player_stats" in item:
                 ni["stats"] = item["player_stats"]
         self.balls = sorted(balls)
+        if self.config["best_balls_first"]:
+            self.balls = self.balls[::-1]
         self.inventory = ni
 
     def get_trainer_info(self, delay):
@@ -142,14 +146,8 @@ class PoGoBot(object):
         sys.stdout.write("  Hatched eggs: %d\n" % self.inventory["stats"]["eggs_hatched"])
         sys.stdout.write("  Forts spun: %d\n" % self.inventory["stats"]["poke_stop_visits"])
         sys.stdout.write("  Unique pokedex entries: %d\n" % (self.inventory["stats"]["unique_pokedex_entries"]))
-        sys.stdout.write("  Pokemon storage: %d/%d\n" % (sum([len(p) for p in self.inventory["pokemon"]]) + sum([len(p) for p in self.inventory["eggs"]]), self.player["max_pokemon_storage"]))
-        sys.stdout.write("  Item storage: %d/%d\n" % (sum(self.inventory["items"].values()), self.player["max_item_storage"]))
-        first = True
-        for i in self.inventory["items"]:
-            if first:
-                sys.stdout.write("  Inventory:\n")
-                first = False
-            sys.stdout.write("      %d x %s\n" % (self.inventory["items"][i], self.item_names[str(i)]))
+        sys.stdout.write("  Pokemon storage: %d/%d\n" % (len(self.inventory["eggs"]) + sum([len(self.inventory["pokemon"][p]) for p in self.inventory["pokemon"]]), self.player["max_pokemon_storage"]))
+        sys.stdout.write("  Egg storage: %d/%d\n" % (len(self.inventory["eggs"]), 9))
         first = True
         for ib in self.inventory["incubators"]:
             if 'pokemon_id' in self.inventory["incubators"][ib]:
@@ -158,6 +156,13 @@ class PoGoBot(object):
                     first = False
                 ib = self.inventory["incubators"][ib]
                 sys.stdout.write("    Remaining km: %f\n" % (ib["target_km_walked"]-self.inventory["stats"]["km_walked"]))
+        sys.stdout.write("  Item storage: %d/%d\n" % (sum(self.inventory["items"].values()), self.player["max_item_storage"]))
+        first = True
+        for i in self.inventory["items"]:
+            if first:
+                sys.stdout.write("  Inventory:\n")
+                first = False
+            sys.stdout.write("      %d x %s\n" % (self.inventory["items"][i], self.item_names[str(i)]))
 
     def check_status_code(self, r, c):
         return (r and "status_code" in r and r["status_code"] == c)
@@ -214,7 +219,6 @@ class PoGoBot(object):
             if "type" in fort and fort["type"] == 1 and not "cooldown_complete_timestamp_ms" in fort:
                 if math.hypot(fort['latitude'] - lat, fort['longitude'] - lng) < 0.0004495:
                     ret = self.api.fort_search(fort_id=fort['id'], fort_latitude=fort['latitude'], fort_longitude=fort['longitude'], player_latitude=lat, player_longitude=lng)
-                    time.sleep(delay)
                     if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
                         self.spins.append(fort)
                         sys.stdout.write("  Spun fort and got:\n")
@@ -228,20 +232,24 @@ class PoGoBot(object):
                                 ni[item["item_id"]] += 1
                         for item in ni:
                             sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
+                    time.sleep(delay)
 
     def catch_pokemon(self, eid, spid, kind, pokemon, balls, delay):
         ret = True
         sys.stdout.write("  Encountered a %s %s...\n" % (kind, self.pokemon_id_to_name(pokemon["pokemon_data"]["pokemon_id"])))
+        minball = 1
         while True:
             normalized_reticle_size = 1.950 - random.uniform(0, .15)
             normalized_hit_position = 1.0
             spin_modifier = 1.0 - random.uniform(0, .1)
             if len(balls) == 0:
                 break
-            ball = balls.pop(0)
+            if minball in balls:
+                ball = balls.pop(balls.index(minball))
+            else:
+                ball = balls.pop()
             sys.stdout.write("    Throwing a %s..." % self.item_names[str(ball)])
             ret = self.api.catch_pokemon(encounter_id=eid, spawn_point_id=spid, pokeball=ball, normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
-            time.sleep(delay)
             if self.check_status_code(ret, 3):
                 sys.stdout.write("softbanned.\n")
                 ret = False
@@ -259,24 +267,30 @@ class PoGoBot(object):
                     break
                 elif ret["responses"]["CATCH_POKEMON"]["status"] == 2:
                     sys.stdout.write("escape.\n")
+                    if not self.config["best_balls_first"]:
+                        minball += 1
+                    if minball > 3:
+                        minball = 3
+                    time.sleep(delay)
                 elif ret["responses"]["CATCH_POKEMON"]["status"] == 3:
                     sys.stdout.write("flee.\n")
                     break
                 elif ret["responses"]["CATCH_POKEMON"]["status"] == 4:
                     sys.stdout.write("missed.\n")
-        return ret
+                    time.sleep(delay)
+        time.sleep(delay)
 
     def catch_wild_pokemon(self, delay):
         sys.stdout.write("Catching wild pokemon...\n")
         lat, lng, alt = self.api.get_position()
-        ret = True
         for pokemon in self.pois["pokemon"]:
             ret = self.api.encounter(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
-            time.sleep(delay)
-            if not self.catch_pokemon(pokemon['encounter_id'], pokemon['spawn_point_id'], "wild", pokemon, self.balls, delay):
-                ret = False
-                break
-        return ret
+            if self.check_status_code(ret, 1) and ret["responses"]["ENCOUNTER"]["status"] == 1:
+                time.sleep(delay)
+                if not self.catch_pokemon(pokemon['encounter_id'], pokemon['spawn_point_id'], "wild", pokemon, self.balls, delay):
+                    break
+            else:
+                print(ret)
 
     def catch_incense_pokemon(self, delay):
         sys.stdout.write("Catching incense pokemon...\n")
@@ -286,7 +300,6 @@ class PoGoBot(object):
         if ret and "GET_INCENSE_POKEMON" in ret["responses"] and ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
             pokemon = ret["responses"]["GET_INCENSE_POKEMON"]
             ret = api.incense_encounter(encounter_id=pokemon["encounter_id"], encounter_location=pokemon["encounter_location"])
-            time.sleep(delay)
             if ret and "INCENSE_ENCOUNTER" in enc["responses"] and ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 1:
                 self.catch_pokemon(pokemon["encounter_id"], pokemon["encounter_location"], "incense", pokemon, self.balls, delay)
 
@@ -391,42 +404,55 @@ class PoGoBot(object):
                             transferable_pokemon.append((pokemon, pq))
             for pokemon, pq in transferable_pokemon:
                 ret = self.api.release_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
-                time.sleep(delay)
                 if ret and "RELEASE_POKEMON" in ret['responses'] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
                     sys.stdout.write("    A %s with a power quotient of %d was released.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])]), pq))
+                time.sleep(delay)
+
+    def evolve_pokemon(self, delay):
+        e = 0
+        evolveable_pokemon = []
+        if len(self.inventory["eggs"]) + sum([len(self.inventory["pokemon"][p]) for p in self.inventory["pokemon"]]) == self.player["max_pokemon_storage"]:
+            sys.stdout.write("Evolving pokemon...\n")
+            for family, evos in self.enabled_evolutions.iteritems():
+                if family in self.inventory["pokemon"]:
+                    while evos > 0 and len(self.inventory["pokemon"][family]) > 0:
+                        evolveable_pokemon.append(self.inventory["pokemon"][family].pop())
+                        evos -= 1
+            sys.stdout.write("  There are %d evolveable pokemon...\n" & len(evolveable_pokemon))
+            sys.exit()
+            for pokemon in evolveable_pokemon:
+                ret = self.api.evolve_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
+                if self.check_status_code(ret, 1) and ret["responses"]["EVOLVE_POKEMON"]["result"] == 1:
+                    sys.stdout.write("    A %s was evolved.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])])))
+                    e += 1
+                time.sleep(delay)
+        return e
 
     def play(self):
-        delay = 2
+        delay = 5
         while True:
+            skipmove = 0
             self.save_config()
             self.get_hatched_eggs(delay)
             self.get_trainer_info(delay)
             self.get_rewards(delay)
-            time.sleep(5)
             self.get_pois(delay)
             if not self.config["nospin"]:
                 self.spin_forts(delay)
             if not self.config["nocatch"]:
-                if not self.softbanned:
-                    self.softbanned = not self.catch_wild_pokemon(delay)
-                    if not self.softbanned:
-                        self.catch_incense_pokemon(delay)
-                    else:
-                        sys.stdout.write("Detected softban...\n")
-                        self.unsoftban = time.time() + 600
-                        sys.stdout.write("  Catching disabled for 10 minutes.\n")
-                else:
-                    if time.time() > self.unsoftban:
-                        sys.stdout.write("Lifting softban...\n")
-                        self.softbanned = False
-                        self.unsoftban = 0
+                self.catch_wild_pokemon(delay)
+                self.catch_incense_pokemon(delay)
             self.load_incubators()
             self.prune_inventory(delay)
             self.process_candies()
             if self.config["minpokemon"] >= 0:
                 self.transfer_pokemon(delay)
+            skipmove += self.evolve_pokemon(delay)
             self.save_map()
-            self.move(self.config["speed"])
+            if skipmove == 0:
+                self.move(self.config["speed"])
+            else:
+                self.last_move_time = time.time()
 
     def run(self):
         while True:
