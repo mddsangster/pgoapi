@@ -1,0 +1,28 @@
+{
+  "DEBUG": false,
+  "auth_service": "google",
+  "debug": false,
+  "inventory_limits": {
+    "1": 50,
+    "101": 0,
+    "102": 0,
+    "103": 100,
+    "2": 100,
+    "201": 0,
+    "701": 0
+  },
+  "inventory_minimum": {
+    "1": 10,
+    "103": 50,
+    "2": 50
+  },
+  "minpokemon": 200,
+  "key": "AIzaSyA9xfD-b92X7UG00xHALhspO1sdH4Kb70o",
+  "location": "40.760369,-73.990014",
+  "nocatch": false,
+  "nospin": false,
+  "password": "kahdkjsahdjksahjk",
+  "powerquotient": 80,
+  "speed": 7,
+  "username": "for@bar.baz"
+}

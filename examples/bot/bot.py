@@ -19,6 +19,8 @@ class PoGoBot(object):
 
     def __init__(self, config):
         self.config = config
+        self.softbanned = False
+        self.unsoftban = 0
         self.api = pgoapi.PGoApi()
         self.api.set_position(*self.config["location"])
         self.angle = random.uniform(0,360)
@@ -68,16 +70,23 @@ class PoGoBot(object):
     def prune_inventory(self, delay):
         sys.stdout.write("Pruning inventory...\n")
         first = True
-        for il in self.config["inventory_limits"]:
-            if il in self.inventory["items"] and self.inventory["items"][il] > self.config["inventory_limits"][il]:
-                count = self.inventory["items"][il] - self.config["inventory_limits"][il]
+        if sum(self.inventory["items"].values()) < self.player["max_item_storage"]:
+            status = "Below"
+            limit = "inventory_limits"
+        else:
+            status = "At"
+            limit = "inventory_minimum"
+        for il in self.config[limit]:
+            if il in self.inventory["items"] and self.inventory["items"][il] > self.config[limit][il]:
+                count = self.inventory["items"][il] - self.config[limit][il]
                 ret = self.api.recycle_inventory_item(item_id=int(il), count=count)
                 time.sleep(delay)
                 if ret and "RECYCLE_INVENTORY_ITEM" in ret['responses'] and ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
                     if first:
-                        sys.stdout.write("  Recycled:\n")
+                        sys.stdout.write("  %s max inventory...\n" % status)
+                        sys.stdout.write("    Recycled:\n")
                         first = False
-                    sys.stdout.write("    %d x %s\n" % (count, self.item_names[il]))
+                    sys.stdout.write("      %d x %s\n" % (count, self.item_names[il]))
 
     def process_inventory(self, inventory):
         ni = {
@@ -95,7 +104,7 @@ class PoGoBot(object):
             if "item" in item:
                 if "count" in item["item"]:
                     if item["item"]["item_id"] in [1,2,3]:
-                        balls.append(item["item"]["item_id"])
+                        balls = balls + [item["item"]["item_id"]] * item["item"]["count"]
                     ni["items"][str(item["item"]["item_id"])] = item["item"]["count"]
             elif "candy" in item:
                 if "candy" in item["candy"]:
@@ -130,8 +139,17 @@ class PoGoBot(object):
         sys.stdout.write("  Next level experience needed: %d\n" % (self.inventory["stats"]["next_level_xp"]-self.inventory["stats"]["experience"]))
         sys.stdout.write("  Kilometers walked: %.2f\n" % self.inventory["stats"]["km_walked"])
         sys.stdout.write("  Stardust: %d\n" % [cur["amount"] for cur in self.player["currencies"] if cur["name"] == "STARDUST"][0])
-        sys.stdout.write("  Item storage: %d/%d\n" % (sum(self.inventory["items"].values()), self.player["max_item_storage"]))
+        sys.stdout.write("  Hatched eggs: %d\n" % self.inventory["stats"]["eggs_hatched"])
+        sys.stdout.write("  Forts spun: %d\n" % self.inventory["stats"]["poke_stop_visits"])
+        sys.stdout.write("  Unique pokedex entries: %d\n" % (self.inventory["stats"]["unique_pokedex_entries"]))
         sys.stdout.write("  Pokemon storage: %d/%d\n" % (sum([len(p) for p in self.inventory["pokemon"]]) + sum([len(p) for p in self.inventory["eggs"]]), self.player["max_pokemon_storage"]))
+        sys.stdout.write("  Item storage: %d/%d\n" % (sum(self.inventory["items"].values()), self.player["max_item_storage"]))
+        first = True
+        for i in self.inventory["items"]:
+            if first:
+                sys.stdout.write("  Inventory:\n")
+                first = False
+            sys.stdout.write("      %d x %s\n" % (self.inventory["items"][i], self.item_names[str(i)]))
         first = True
         for ib in self.inventory["incubators"]:
             if 'pokemon_id' in self.inventory["incubators"][ib]:
@@ -141,18 +159,21 @@ class PoGoBot(object):
                 ib = self.inventory["incubators"][ib]
                 sys.stdout.write("    Remaining km: %f\n" % (ib["target_km_walked"]-self.inventory["stats"]["km_walked"]))
 
+    def check_status_code(self, r, c):
+        return (r and "status_code" in r and r["status_code"] == c)
+
     def get_hatched_eggs(self, delay):
         sys.stdout.write("Getting hatched eggs...\n")
         ret = self.api.get_hatched_eggs()
-        if ret and ret["responses"]:
-            pass#print(ret["responses"]["GET_HATCHED_EGGS"])
+        if self.check_status_code(ret, 1):
+            print(ret)
         time.sleep(delay)
 
     def get_rewards(self, delay):
         sys.stdout.write("Getting level-up rewards...\n")
         ret = self.api.level_up_rewards(level=self.inventory["stats"]["level"])
-        if ret and ret["responses"]:
-            pass#print(ret["responses"]["LEVEL_UP_REWARDS"])
+        if self.check_status_code(ret, 1) and ret["responses"]["LEVEL_UP_REWARDS"]["result"] == 1:
+            print(ret)
         time.sleep(delay)
 
     def get_cell_ids(self, lat, lng, radius=10):
@@ -209,32 +230,53 @@ class PoGoBot(object):
                             sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
 
     def catch_pokemon(self, eid, spid, kind, pokemon, balls, delay):
+        ret = True
+        sys.stdout.write("  Encountered a %s %s...\n" % (kind, self.pokemon_id_to_name(pokemon["pokemon_data"]["pokemon_id"])))
         while True:
-            normalized_reticle_size = 1.950 - random.uniform(0, .5)
+            normalized_reticle_size = 1.950 - random.uniform(0, .15)
             normalized_hit_position = 1.0
             spin_modifier = 1.0 - random.uniform(0, .1)
             if len(balls) == 0:
                 break
-            ret = self.api.catch_pokemon(encounter_id=eid, spawn_point_id=spid, pokeball=balls.pop(0), normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
+            ball = balls.pop(0)
+            sys.stdout.write("    Throwing a %s..." % self.item_names[str(ball)])
+            ret = self.api.catch_pokemon(encounter_id=eid, spawn_point_id=spid, pokeball=ball, normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
             time.sleep(delay)
-            if "status" in ret["responses"]["CATCH_POKEMON"]:
+            if self.check_status_code(ret, 3):
+                sys.stdout.write("softbanned.\n")
+                ret = False
+                break
+            elif self.check_status_code(ret, 1):
                 if ret["responses"]["CATCH_POKEMON"]["status"] == 1:
+                    sys.stdout.write("success.\n")
                     self.catches.append(pokemon)
-                    sys.stdout.write("  Caught a %s %s and got:\n" % (kind, self.pokemon_id_to_name(pokemon["pokemon_data"]["pokemon_id"])))
-                    sys.stdout.write("    Experience: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["xp"]))
-                    sys.stdout.write("    Stardust: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["stardust"]))
-                    sys.stdout.write("    Candies: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["candy"]))
+                    sys.stdout.write("      Experience: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["xp"]))
+                    sys.stdout.write("      Stardust: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["stardust"]))
+                    sys.stdout.write("      Candies: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["candy"]))
                     break
-                elif ret["responses"]["CATCH_POKEMON"]["status"] == 0 or ret["responses"]["CATCH_POKEMON"]["status"] == 3:
+                elif ret["responses"]["CATCH_POKEMON"]["status"] == 0:
+                    sys.stdout.write("error.\n")
                     break
+                elif ret["responses"]["CATCH_POKEMON"]["status"] == 2:
+                    sys.stdout.write("escape.\n")
+                elif ret["responses"]["CATCH_POKEMON"]["status"] == 3:
+                    sys.stdout.write("flee.\n")
+                    break
+                elif ret["responses"]["CATCH_POKEMON"]["status"] == 4:
+                    sys.stdout.write("missed.\n")
+        return ret
 
     def catch_wild_pokemon(self, delay):
         sys.stdout.write("Catching wild pokemon...\n")
         lat, lng, alt = self.api.get_position()
+        ret = True
         for pokemon in self.pois["pokemon"]:
             ret = self.api.encounter(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
             time.sleep(delay)
-            self.catch_pokemon(pokemon['encounter_id'], pokemon['spawn_point_id'], "wild", pokemon, self.balls, delay)
+            if not self.catch_pokemon(pokemon['encounter_id'], pokemon['spawn_point_id'], "wild", pokemon, self.balls, delay):
+                ret = False
+                break
+        return ret
 
     def catch_incense_pokemon(self, delay):
         sys.stdout.write("Catching incense pokemon...\n")
@@ -260,7 +302,6 @@ class PoGoBot(object):
         lat += math.cos(self.angle)*r
         lng += math.sin(self.angle)*r
         self.api.set_position(lat, lng, alt)
-        self.config["location"] = "%f,%f" % (lat, lng)
         self.coords.append({'latitude': lat, 'longitude': lng})
         self.last_move_time = now
 
@@ -280,6 +321,9 @@ class PoGoBot(object):
             print(map, file=out)
 
     def save_config(self):
+        sys.stdout.write("Saving config...\n")
+        lat, lng, alt = self.api.get_position()
+        self.config["location"] = "%f,%f" % (lat, lng)
         with open("config.json", "w") as out:
             json.dump(self.config, out, indent=2, sort_keys=True)
 
@@ -328,45 +372,61 @@ class PoGoBot(object):
                     sys.stdout.write("    %d x %s\n" % (deficit, self.pokemon_id_to_name(self.family_ids[str(family)])))
 
     def transfer_pokemon(self, delay):
-        sys.stdout.write("Transfering pokemon...\n")
-        transferable_pokemon = []
-        for pid in self.inventory["pokemon"]:
-            count = 0
-            for pokemon in self.inventory["pokemon"][pid]:
-                pq = self.calc_pq(pokemon)
-                if pq < self.config["powerquotient"]:
-                    if pid in self.pokemon_deficit:
-                        if self.pokemon_deficit[pid] < 0:
-                            if count < abs(self.pokemon_deficit[pid]):
-                                transferable_pokemon.append((pokemon, pq))
-                                count += 1
-                            else:
-                                break
-                    else:
-                        transferable_pokemon.append((pokemon, pq))
-        for pokemon, pq in transferable_pokemon:
-            ret = self.api.release_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
-            time.sleep(delay)
-            if ret and "RELEASE_POKEMON" in ret['responses'] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
-                sys.stdout.write("    A %s with a power quotient of %d was released.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])]), pq))
+        if sum(self.inventory["pokemon"].values()) > self.config["minpokemon"]:
+            sys.stdout.write("Transfering pokemon...\n")
+            transferable_pokemon = []
+            for pid in self.inventory["pokemon"]:
+                count = 0
+                for pokemon in self.inventory["pokemon"][pid]:
+                    pq = self.calc_pq(pokemon)
+                    if pq < self.config["powerquotient"]:
+                        if pid in self.pokemon_deficit:
+                            if self.pokemon_deficit[pid] < 0:
+                                if count < abs(self.pokemon_deficit[pid]):
+                                    transferable_pokemon.append((pokemon, pq))
+                                    count += 1
+                                else:
+                                    break
+                        else:
+                            transferable_pokemon.append((pokemon, pq))
+            for pokemon, pq in transferable_pokemon:
+                ret = self.api.release_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
+                time.sleep(delay)
+                if ret and "RELEASE_POKEMON" in ret['responses'] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
+                    sys.stdout.write("    A %s with a power quotient of %d was released.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])]), pq))
 
     def play(self):
         delay = 2
         while True:
+            self.save_config()
             self.get_hatched_eggs(delay)
             self.get_trainer_info(delay)
             self.get_rewards(delay)
+            time.sleep(5)
             self.get_pois(delay)
-            self.spin_forts(delay)
-            self.catch_wild_pokemon(delay)
-            self.catch_incense_pokemon(delay)
+            if not self.config["nospin"]:
+                self.spin_forts(delay)
+            if not self.config["nocatch"]:
+                if not self.softbanned:
+                    self.softbanned = not self.catch_wild_pokemon(delay)
+                    if not self.softbanned:
+                        self.catch_incense_pokemon(delay)
+                    else:
+                        sys.stdout.write("Detected softban...\n")
+                        self.unsoftban = time.time() + 600
+                        sys.stdout.write("  Catching disabled for 10 minutes.\n")
+                else:
+                    if time.time() > self.unsoftban:
+                        sys.stdout.write("Lifting softban...\n")
+                        self.softbanned = False
+                        self.unsoftban = 0
             self.load_incubators()
             self.prune_inventory(delay)
             self.process_candies()
-            self.transfer_pokemon(delay)
+            if self.config["minpokemon"] >= 0:
+                self.transfer_pokemon(delay)
             self.save_map()
             self.move(self.config["speed"])
-            self.save_config()
 
     def run(self):
         while True:
