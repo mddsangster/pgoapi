@@ -372,7 +372,7 @@ class PoGoBot(object):
                     sys.stdout.write("    %d x %s\n" % (deficit, self.pokemon_id_to_name(self.family_ids[str(family)])))
 
     def transfer_pokemon(self, delay):
-        if sum(self.inventory["pokemon"].values()) > self.config["minpokemon"]:
+        if (sum([len(p) for p in self.inventory["pokemon"]]) + sum([len(p) for p in self.inventory["eggs"]])) > self.config["minpokemon"]:
             sys.stdout.write("Transfering pokemon...\n")
             transferable_pokemon = []
             for pid in self.inventory["pokemon"]:
