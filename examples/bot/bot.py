@@ -95,7 +95,7 @@ class PoGoBot(object):
             "pokemon": {},
             "eggs": [],
             "stats": {},
-            "applied": {},
+            "applied": [],
             "incubators": []
         }
         balls = []
@@ -125,7 +125,9 @@ class PoGoBot(object):
             elif "player_stats" in item:
                 ni["stats"] = item["player_stats"]
             elif "applied_items" in item:
-                ni["applied"] = item["applied_items"]["item"]
+                for itm in item["applied_items"]["item"]:
+                    if (itm["expire_ms"]/1000) > time.time():
+                        ni["applied"].append(itm)
             else:
                 pass
         self.balls = sorted(balls)
