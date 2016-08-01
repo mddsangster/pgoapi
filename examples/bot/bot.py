@@ -166,7 +166,7 @@ class PoGoBot(object):
         sys.stdout.write("  Hatched eggs: %d\n" % self.inventory["stats"]["eggs_hatched"])
         sys.stdout.write("  Forts spun: %d\n" % self.inventory["stats"]["poke_stop_visits"])
         sys.stdout.write("  Unique pokedex entries: %d\n" % (self.inventory["stats"]["unique_pokedex_entries"]))
-        sys.stdout.write("  Pokemon storage: %d/%d\n" % (len(self.inventory["eggs"]) + sum([len(self.inventory["pokemon"][p]) for p in self.inventory["pokemon"]]), self.player["max_pokemon_storage"]))
+        sys.stdout.write("  Pokemon storage: %d/%d\n" % (sum([len(v) for k,v in self.inventory["pokemon"].iteritems()]) + len(self.inventory["eggs"]), self.player["max_pokemon_storage"]))
         sys.stdout.write("  Egg storage: %d/%d\n" % (len(self.inventory["eggs"]), 9))
         first = True
         for ib in self.inventory["incubators"]:
@@ -506,7 +506,7 @@ class PoGoBot(object):
 
     def transfer_pokemon(self, delay):
         t = 0
-        if (sum([len(p) for p in self.inventory["pokemon"]]) + sum([len(p) for p in self.inventory["eggs"]])) > self.config["minpokemon"]:
+        if (sum([len(v) for k,v in self.inventory["pokemon"].iteritems()]) + len(self.inventory["eggs"])) > self.config["minpokemon"]:
             sys.stdout.write("Transfering pokemon...\n")
             transferable_pokemon = []
             for pid in self.inventory["pokemon"]:
