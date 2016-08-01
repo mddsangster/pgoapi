@@ -294,14 +294,14 @@ class PoGoBot(object):
         pcap = pokemon["capture_probability"]["capture_probability"][0]
         sys.stdout.write("  Encountered a %s %s...\n" % (kind, self.pokemon_id_to_name(pid)))
         sys.stdout.write("    Pokeball capture probability is %.2f...\n" % pcap)
-        if pcap < .2 and "701" in self.inventory["items"]:
-            sys.stdout.write("      Using a %s..." % self.item_names["701"])
-            ret = self.api.item_use(item_id=701)
-            if self.check_status_code(ret, 1) and ret["responses"]["USE_ITEM_XP_BOOST"]["result"] == 1:
-                sys.stdout.write("success.\n")
-            else:
-                sys.stdout.write("failed.\n")
-            time.sleep(delay)
+        # if pcap < .2 and "701" in self.inventory["items"]:
+        #     sys.stdout.write("      Using a %s..." % self.item_names["701"])
+        #     ret = self.api.item_use(item_id=701)
+        #     if self.check_status_code(ret, 1) and ret["responses"]["USE_ITEM_XP_BOOST"]["result"] == 1:
+        #         sys.stdout.write("success.\n")
+        #     else:
+        #         sys.stdout.write("failed.\n")
+        #     time.sleep(delay)
         minball = 1
         while True:
             normalized_reticle_size = 1.950 - random.uniform(0, .15)
