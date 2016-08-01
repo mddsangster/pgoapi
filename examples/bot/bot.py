@@ -386,7 +386,7 @@ class PoGoBot(object):
             newlat = lat + pymath.cos(self.angle) * r
             newlng = lng + pymath.sin(self.angle) * r
             if not self.point_in_poly(newlat, newlng, self.config["bounds"]):
-                self.angle = self.angle + 180 + random.gauss(0,45)
+                self.angle = self.angle + 180 + random.gauss(0,60)
             else:
                 break
         self.api.set_position(newlat, newlng, alt)
@@ -500,6 +500,8 @@ class PoGoBot(object):
                         isize = len(self.inventory["pokemon"][family])
                         if isize < evos:
                             extra = " (%d more pokemon needed)" % (evos-isize)
+                    else:
+                        extra = " (%d more pokemon needed)" % evos
                     sys.stdout.write("    %d x %s%s\n" % (evos, self.pokemon_id_to_name(self.family_ids[str(family)]), extra))
 
     def transfer_pokemon(self, delay):
