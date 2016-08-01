@@ -279,13 +279,27 @@ class PoGoBot(object):
                                 sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
                     time.sleep(delay)
 
-    def catch_pokemon(self, eid, spid, kind, pokemon, balls, delay):
+    def catch_pokemon(self, pokemon, balls, delay):
         ret = True
-        if kind == "wild":
-            pid = pokemon["pokemon_data"]["pokemon_id"]
+        if "wild_pokemon" in pokemon:
+            eid = pokemon["wild_pokemon"]["encounter_id"]
+            spid = pokemon["wild_pokemon"]["spawn_point_id"]
+            pid = pokemon["wild_pokemon"]["pokemon_data"]["pokemon_id"]
+            kind = "wild"
         else:
-            pid = pokemon["pokemon_id"]
+            print(pokemon)
+            sys.exit(1)
+        pcap = pokemon["capture_probability"]["capture_probability"][0]
         sys.stdout.write("  Encountered a %s %s...\n" % (kind, self.pokemon_id_to_name(pid)))
+        sys.stdout.write("    Pokeball capture probability is %.2f...\n" % pcap)
+        if pcap < .2 and "701" in self.inventory["items"]:
+            sys.stdout.write("      Using a %s..." % self.item_names["701"])
+            ret = self.api.item_use(item_id=701)
+            if self.check_status_code(ret, 1) and ret["responses"]["USE_ITEM_XP_BOOST"]["result"] == 1:
+                sys.stdout.write("success.\n")
+            else:
+                sys.stdout.write("failed.\n")
+            time.sleep(delay)
         minball = 1
         while True:
             normalized_reticle_size = 1.950 - random.uniform(0, .15)
@@ -335,8 +349,9 @@ class PoGoBot(object):
         for pokemon in self.pois["pokemon"]:
             ret = self.api.encounter(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
             if self.check_status_code(ret, 1) and ret["responses"]["ENCOUNTER"]["status"] == 1:
+                pokemon = ret["responses"]["ENCOUNTER"]
                 time.sleep(delay)
-                if not self.catch_pokemon(pokemon['encounter_id'], pokemon['spawn_point_id'], "wild", pokemon, self.balls, delay):
+                if not self.catch_pokemon(pokemon, self.balls, delay):
                     break
             else:
                 print(ret)
@@ -351,6 +366,7 @@ class PoGoBot(object):
             ret = self.api.incense_encounter(encounter_id=pokemon["encounter_id"], encounter_location=pokemon["encounter_location"])
             time.sleep(delay)
             if self.check_status_code(ret, 1) and ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 1:
+                print(ret)
                 self.catch_pokemon(pokemon["encounter_id"], pokemon["encounter_location"], "incense", pokemon, self.balls, delay)
 
     def move(self, mph=5):
@@ -376,11 +392,14 @@ class PoGoBot(object):
         for coord in self.coords:
             map.add_position((coord['latitude'], coord['longitude']))
         for catch in self.catches:
-            if "pokemon_data" in catch:
-                pid = catch["pokemon_data"]["pokemon_id"]
+            if "wild_pokemon" in catch:
+                pid = catch["wild_pokemon"]["pokemon_data"]["pokemon_id"]
+                lat = catch["wild_pokemon"]["latitude"]
+                lng = catch["wild_pokemon"]["longitude"]
             else:
-                pid = catch["pokemon_id"]
-            map.add_point((catch['latitude'], catch['longitude']), "http://pokeapi.co/media/sprites/pokemon/%d.png" % pid)
+                print(catch)
+                sys.exit(1)
+            map.add_point((lat, lng), "http://pokeapi.co/media/sprites/pokemon/%d.png" % pid)
         for spin in self.spins:
             map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
 
