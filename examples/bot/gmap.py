@@ -2,15 +2,26 @@ class Map(object):
     def __init__(self):
         self._points = []
         self._positions = []
+        self._bounds = []
         self._player = None
     def add_point(self, coordinates, color="#FF0000"):
         self._points.append((coordinates, color))
     def add_position(self, coordinates):
         self._positions.append(coordinates)
+    def add_bound(self, coordinates):
+        self._bounds.append(coordinates)
     def __str__(self):
         centerLat = sum((x[0] for x in self._positions)) / len(self._positions)
         centerLon = sum((x[1] for x in self._positions)) / len(self._positions)
         pathCode = """
+            var boundsCoords = [{bounds}];
+            var bounds = new google.maps.Polyline({{
+                path: boundsCoords,
+                geodesic: true,
+                strokeColor: '#FF0000',
+                strokeOpacity: 0.5,
+                strokeWeight: 8}});
+            bounds.setMap(map);
             var walkPathCoords = [{path}];
             var walkPath = new google.maps.Polyline({{
                 path: walkPathCoords,
@@ -19,7 +30,8 @@ class Map(object):
                 strokeOpacity: 0.5,
                 strokeWeight: 4}});
             walkPath.setMap(map);
-        """.format(path=",".join(["new google.maps.LatLng(%f,%f)" % (p[0], p[1]) for p in self._positions]))
+        """.format(bounds=",".join(["new google.maps.LatLng(%f,%f)" % (p[0], p[1]) for p in self._bounds]),
+                   path=",".join(["new google.maps.LatLng(%f,%f)" % (p[0], p[1]) for p in self._positions]))
         markersCode = "\n".join(
             ["""var marker = new google.maps.Marker({{
                 position: {{lat: {lat}, lng: {lng}}},
