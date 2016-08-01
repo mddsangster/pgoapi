@@ -386,7 +386,7 @@ class PoGoBot(object):
             newlat = lat + pymath.cos(self.angle) * r
             newlng = lng + pymath.sin(self.angle) * r
             if not self.point_in_poly(newlat, newlng, self.config["bounds"]):
-                self.angle = random.uniform(0,360)
+                self.angle = self.angle + 180 + random.gauss(0,45)
             else:
                 break
         self.api.set_position(newlat, newlng, alt)
@@ -525,6 +525,11 @@ class PoGoBot(object):
                                     count -= 1
                                 if count == 0:
                                     break
+                else:
+                    for pokemon in self.inventory["pokemon"][pid]:
+                        pq = self.calc_pq(pokemon)
+                        if pq < self.config["powerquotient"]:
+                            transferable_pokemon.append((pokemon, pq))
             for pokemon, pq in transferable_pokemon:
                 ret = self.api.release_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
                 if ret and "RELEASE_POKEMON" in ret['responses'] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
@@ -536,15 +541,17 @@ class PoGoBot(object):
     def evolve_pokemon(self, delay):
         e = 0
         evolveable_pokemon = []
+        lowcost = []
         if len(self.inventory["eggs"]) + sum([len(self.inventory["pokemon"][p]) for p in self.inventory["pokemon"]]) == self.player["max_pokemon_storage"]:
             sys.stdout.write("Evolving pokemon...\n")
-            sys.exit(1)
-            for family, evos in self.enabled_evolutions.iteritems():
-                if family in self.inventory["pokemon"]:
-                    while evos > 0 and len(self.inventory["pokemon"][family]) > 0:
-                        evolveable_pokemon.append(self.inventory["pokemon"][family].pop())
+            for pid, evos in self.enabled_evolutions.iteritems():
+                if pid in self.inventory["pokemon"] and self.evoreq[pid] < 50:
+                    while evos > 0 and len(self.inventory["pokemon"][pid]) > 0:
+                        lowcost.append(self.inventory["pokemon"][pid].pop())
                         evos -= 1
-            sys.stdout.write("  There are %d evolveable pokemon...\n" % len(evolveable_pokemon))
+            sys.stdout.write("  Found %d low cost pokemon evolutions...\n" % len(lowcost))
+            evolveable_pokemon = [] + lowcost
+            sys.stdout.write("  There are %d total evolveable pokemon...\n" % len(evolveable_pokemon))
             if len(evolveable_pokemon) > 100 and "301" in self.inventory["items"]:
                 sys.stdout.write("  Using a lucky egg...")
                 ret = self.api.use_item_xp_boost(item_id=301)
