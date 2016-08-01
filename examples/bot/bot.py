@@ -4,14 +4,14 @@ import os
 import sys
 import time
 import json
-import math
+import math as pymath
 import random
 
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../.."))
 from pgoapi import pgoapi
 import pgoapi.exceptions
 
-from s2sphere import CellId, LatLng
+from s2sphere import LatLng, Angle, Cap, RegionCoverer, math
 
 from gmap import Map
 
@@ -221,17 +221,20 @@ class PoGoBot(object):
                 sys.stdout.write("    %d x %s\n" % (ni[item], self.item_names[str(item)]))
         time.sleep(delay)
 
-    def get_cell_ids(self, lat, lng, radius=10):
-        origin = CellId.from_lat_lng(LatLng.from_degrees(lat, lng)).parent(15)
-        walk = [origin.id()]
-        right = origin.next()
-        left = origin.prev()
-        for _ in range(radius):
-            walk.append(right.id())
-            walk.append(left.id())
-            right = right.next()
-            left = left.prev()
-        return sorted(walk)
+    EARTH_RADIUS = 6371 * 1000
+    def get_cell_ids(self, lat, long, radius=1000):
+        print(lat,type(lat))
+        # Max values allowed by server according to this comment:
+        # https://github.com/AeonLucid/POGOProtos/issues/83#issuecomment-235612285
+        if radius > 1500:
+            radius = 1500  # radius = 1500 is max allowed by the server
+        region = Cap.from_axis_angle(LatLng.from_degrees(lat, long).to_point(), Angle.from_degrees(360*radius/(2*math.pi*self.EARTH_RADIUS)))
+        coverer = RegionCoverer()
+        coverer.min_level = 15
+        coverer.max_level = 15
+        cells = coverer.get_covering(region)
+        cells = cells[:100]  # len(cells) = 100 is max allowed by the server
+        return sorted([x.id() for x in cells])
 
     def get_pois(self, delay):
         sys.stdout.write("Getting POIs...\n")
@@ -257,7 +260,7 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         for fort in self.pois["forts"]:
             if "type" in fort and fort["type"] == 1 and not "cooldown_complete_timestamp_ms" in fort:
-                if math.hypot(fort['latitude'] - lat, fort['longitude'] - lng) < 0.0004495:
+                if pymath.hypot(fort['latitude'] - lat, fort['longitude'] - lng) < 0.0004495:
                     ret = self.api.fort_search(fort_id=fort['id'], fort_latitude=fort['latitude'], fort_longitude=fort['longitude'], player_latitude=lat, player_longitude=lng)
                     if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
                         self.spins.append(fort)
@@ -378,8 +381,8 @@ class PoGoBot(object):
             self.change_dir_time = now + 120 + random.uniform(30,90)
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
-        lat += math.cos(self.angle)*r
-        lng += math.sin(self.angle)*r
+        lat += pymath.cos(self.angle)*r
+        lng += pymath.sin(self.angle)*r
         self.api.set_position(lat, lng, alt)
         self.coords.append({'latitude': lat, 'longitude': lng})
         self.last_move_time = now
