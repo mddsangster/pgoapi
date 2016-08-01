@@ -33,20 +33,24 @@ def init_config():
     parser.add_argument("-p", "--password", help="Password")
     parser.add_argument("-l", "--location", help="Location", required=required("location"))
     parser.add_argument("-k", "--key", help="Google Maps API Key", required=required("key"))
-    parser.add_argument("-m", "--minpokemon", type=int, help="Minimum number of pokemon for auto transfing")
+    parser.add_argument("-m", "--minpokemon", type=int, help="Minimum number of pokemon for auto transfing", required=required("minpokemon"))
     parser.add_argument("-s", "--speed", type=float, help="Travel speed in miles per hour", required=required("speed"))
-    parser.add_argument("-q", "--powerquotient", type=int, help="Minimum power quotient for keeping pokemon")
+    parser.add_argument("-q", "--powerquotient", type=int, help="Minimum power quotient for keeping pokemon", required=required("powerquotient"))
     parser.add_argument("-d", "--debug", help="Debug Mode", action='store_true')
     parser.add_argument("--best_balls_first", action='store_true', help="Prioritize throwing better balls")
     parser.add_argument("--nospin", action='store_true', help="Disable spinning forts")
     parser.add_argument("--nocatch",action='store_true', help="Disable catching pokemon")
-    parser.set_defaults(DEBUG=False, powerquotient=0, nospin=False, nocatch=False, minpokemon=-1, best_balls_first=False)
+    parser.set_defaults(DEBUG=False, nospin=False, nocatch=False, best_balls_first=False)
     args = parser.parse_args()
 
     # Passed in arguments shoud trump
     for key in args.__dict__:
         if args.__dict__[key] != None:
             config[key] = args.__dict__[key]
+
+    if "bounds" not in config:
+        log.error("No boundary polygon specified!")
+        return None
 
     if config["auth_service"] not in ['ptc', 'google']:
         log.error("Invalid Auth service specified! ('ptc' or 'google')")

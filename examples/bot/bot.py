@@ -34,6 +34,11 @@ class PoGoBot(object):
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/evoreq.json"), "r") as infile:
             self.evoreq = json.load(infile)
 
+        seen = set()
+        seen_add = seen.add
+        seen_twice = set(x for x in self.family_ids.values() if x in seen or seen_add(x))
+        self.evolvables = map(str, seen_twice)
+
         self.coords = [{'latitude': self.config["location"][0], 'longitude': self.config["location"][1]}]
         self.catches = []
         self.spins = []
@@ -375,15 +380,17 @@ class PoGoBot(object):
         sys.stdout.write("Moving...\n")
         now = time.time()
         delta = now - self.last_move_time
-        if now > self.change_dir_time:
-            self.angle = (self.angle + random.uniform(95,135)) % 360
-            self.change_dir_time = now + 120 + random.uniform(30,90)
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
-        lat += pymath.cos(self.angle)*r
-        lng += pymath.sin(self.angle)*r
-        self.api.set_position(lat, lng, alt)
-        self.coords.append({'latitude': lat, 'longitude': lng})
+        while True:
+            newlat = lat + pymath.cos(self.angle) * r
+            newlng = lng + pymath.sin(self.angle) * r
+            if not self.point_in_poly(newlat, newlng, self.config["bounds"]):
+                self.angle = random.uniform(0,360)
+            else:
+                break
+        self.api.set_position(newlat, newlng, alt)
+        self.coords.append({'latitude': newlat, 'longitude': newlng})
         self.last_move_time = now
 
     def save_map(self):
@@ -391,6 +398,8 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         map = Map()
         map._player = [lat, lng]
+        for bound in self.config["bounds"]:
+            map.add_bound(bound)
         for coord in self.coords:
             map.add_position((coord['latitude'], coord['longitude']))
         for catch in self.catches:
@@ -439,28 +448,59 @@ class PoGoBot(object):
                 pq += pokemon["pokemon_data"][iv]
         return int(round(pq/45.0,2)*100)
 
+    def circle_poly(x,y,r):
+        for i in range(100):
+            ang = i/100 * pymath.pi * 2
+            yield (x + r * pymath.cos(ang), y + r * pymath.sin(ang))
+
+    def point_in_poly(self, x, y, poly):
+        if (x,y) in poly: return True
+        for i in range(len(poly)):
+            p1 = None
+            p2 = None
+            if i==0:
+                p1 = poly[0]
+                p2 = poly[1]
+            else:
+                p1 = poly[i-1]
+                p2 = poly[i]
+            if p1[1] == p2[1] and p1[1] == y and x > min(p1[0], p2[0]) and x < max(p1[0], p2[0]):
+                return True
+        n = len(poly)
+        inside = False
+        p1x,p1y = poly[0]
+        for i in range(n+1):
+            p2x,p2y = poly[i % n]
+            if y > min(p1y,p2y):
+                if y <= max(p1y,p2y):
+                    if x <= max(p1x,p2x):
+                        if p1y != p2y:
+                            xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
+                        if p1x == p2x or x <= xints:
+                            inside = not inside
+            p1x,p1y = p2x,p2y
+        if inside: return True
+        else: return False
+
     def process_candies(self):
         sys.stdout.write("Processing candies...\n")
         self.enabled_evolutions = {}
-        self.pokemon_deficit = {}
         if len(self.inventory["candies"]) > 0:
             for family, count in self.inventory["candies"].iteritems():
                 if family in self.evoreq:
                     evos, extra = divmod(count, self.evoreq[family])
                     if evos > 0:
                         self.enabled_evolutions[family] = evos
-                        if not family in self.inventory["pokemon"]:
-                            self.pokemon_deficit[family] = evos
-                        else:
-                            self.pokemon_deficit[family] = evos - len(self.inventory["pokemon"][family])
             if len(self.enabled_evolutions.keys()) > 0:
-                sys.stdout.write("  Enabled evolutions:\n")
+                sys.stdout.write("  Candy cost met for evolutions:\n")
                 for family, evos in self.enabled_evolutions.iteritems():
-                    sys.stdout.write("    %d x %s\n" % (evos, self.pokemon_id_to_name(self.family_ids[str(family)])))
-            if len(self.pokemon_deficit.keys()) > 0:
-                sys.stdout.write("  Pokemon evolution deficit:\n")
-                for family, deficit in self.pokemon_deficit.iteritems():
-                    sys.stdout.write("    %d x %s\n" % (deficit, self.pokemon_id_to_name(self.family_ids[str(family)])))
+                    extra = ""
+                    isize = 0
+                    if family in self.inventory["pokemon"]:
+                        isize = len(self.inventory["pokemon"][family])
+                        if isize < evos:
+                            extra = " (%d more pokemon needed)" % (evos-isize)
+                    sys.stdout.write("    %d x %s%s\n" % (evos, self.pokemon_id_to_name(self.family_ids[str(family)]), extra))
 
     def transfer_pokemon(self, delay):
         t = 0
@@ -468,23 +508,27 @@ class PoGoBot(object):
             sys.stdout.write("Transfering pokemon...\n")
             transferable_pokemon = []
             for pid in self.inventory["pokemon"]:
-                count = 0
-                for pokemon in self.inventory["pokemon"][pid]:
-                    pq = self.calc_pq(pokemon)
-                    if pq < self.config["powerquotient"]:
-                        if pid in self.pokemon_deficit:
-                            if self.pokemon_deficit[pid] < 0:
-                                if count < abs(self.pokemon_deficit[pid]):
+                if pid in self.evolvables:
+                    if pid not in self.enabled_evolutions:
+                        for pokemon in self.inventory["pokemon"][pid]:
+                            pq = self.calc_pq(pokemon)
+                            if pq < self.config["powerquotient"]:
+                                transferable_pokemon.append((pokemon, pq))
+                    else:
+                        isize = len(self.inventory["pokemon"][pid])
+                        if isize > self.enabled_evolutions[pid]:
+                            count = isize - self.enabled_evolutions[pid]
+                            for pokemon in self.inventory["pokemon"][pid]:
+                                pq = self.calc_pq(pokemon)
+                                if pq < self.config["powerquotient"]:
                                     transferable_pokemon.append((pokemon, pq))
-                                    count += 1
-                                else:
+                                    count -= 1
+                                if count == 0:
                                     break
-                        else:
-                            transferable_pokemon.append((pokemon, pq))
             for pokemon, pq in transferable_pokemon:
                 ret = self.api.release_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
                 if ret and "RELEASE_POKEMON" in ret['responses'] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
-                    sys.stdout.write("    A %s with a power quotient of %d was released.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])]), pq))
+                    sys.stdout.write("  A %s with a power quotient of %d was released.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])]), pq))
                     t += 1
                 time.sleep(delay)
         return t
@@ -494,6 +538,7 @@ class PoGoBot(object):
         evolveable_pokemon = []
         if len(self.inventory["eggs"]) + sum([len(self.inventory["pokemon"][p]) for p in self.inventory["pokemon"]]) == self.player["max_pokemon_storage"]:
             sys.stdout.write("Evolving pokemon...\n")
+            sys.exit(1)
             for family, evos in self.enabled_evolutions.iteritems():
                 if family in self.inventory["pokemon"]:
                     while evos > 0 and len(self.inventory["pokemon"][family]) > 0:
