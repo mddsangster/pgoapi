@@ -292,6 +292,7 @@ class PoGoBot(object):
                     for pokemon in map_cell["wild_pokemons"]:
                         pid = get_key_from_pokemon(pokemon)
                         if not pid in self.pois["pokemon"]:
+                            pokemon['time_till_hidden_ms'] = time.time() + pokemon['time_till_hidden_ms']/1000
                             self.pois["pokemon"][pid] = pokemon
                             newpokemon += 1
                 if 'forts' in map_cell:
@@ -305,6 +306,16 @@ class PoGoBot(object):
         if newforts > 0:
             sys.stdout.write("  Found %d new forts.\n" % newforts)
         time.sleep(delay)
+
+    def prune_expired_pokemon(self):
+        sys.stdout.write("Pruning expired pokemon...\n")
+        expired = 0
+        for k, pokemon in self.pois["pokemon"].iteritems():
+            if pokemon['time_till_hidden_ms'] <= time.time():
+                del self.pois["pokemon"][k]
+                expired += 1
+        if expired > 0:
+            sys.stdout.write("  %d pokemon expired.\n" % expired)
 
     def spin_forts(self, delay):
         sys.stdout.write("Spinning forts...\n")
@@ -613,6 +624,7 @@ class PoGoBot(object):
                     continue
             self.kill_time(5)
             self.get_pois(delay)
+            self.prune_expired_pokemon()
             self.kill_time(10)
             if not self.config["nospin"]:
                 self.spin_forts(1)
