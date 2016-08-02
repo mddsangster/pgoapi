@@ -15,6 +15,43 @@ from s2sphere import LatLng, Angle, Cap, RegionCoverer, math
 
 from gmap import Map
 
+def get_key_from_pokemon(pokemon):
+    return '{}-{}'.format(pokemon['spawn_point_id'], pokemon['pokemon_data']['pokemon_id'])
+
+def angle_between_points((lat1, lng1), (lat2, lng2)):
+    xDiff = lng2 - lng1
+    yDiff = lat2 - lat1
+    return pymath.degrees(pymath.atan2(yDiff, xDiff))
+
+def point_in_poly(x, y, poly):
+    if (x,y) in poly: return True
+    for i in range(len(poly)):
+        p1 = None
+        p2 = None
+        if i==0:
+            p1 = poly[0]
+            p2 = poly[1]
+        else:
+            p1 = poly[i-1]
+            p2 = poly[i]
+        if p1[1] == p2[1] and p1[1] == y and x > min(p1[0], p2[0]) and x < max(p1[0], p2[0]):
+            return True
+    n = len(poly)
+    inside = False
+    p1x,p1y = poly[0]
+    for i in range(n+1):
+        p2x,p2y = poly[i % n]
+        if y > min(p1y,p2y):
+            if y <= max(p1y,p2y):
+                if x <= max(p1x,p2x):
+                    if p1y != p2y:
+                        xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x,p1y = p2x,p2y
+    if inside: return True
+    else: return False
+
 class PoGoBot(object):
 
     def __init__(self, config):
@@ -42,6 +79,7 @@ class PoGoBot(object):
         self.coords = [{'latitude': self.config["location"][0], 'longitude': self.config["location"][1]}]
         self.catches = []
         self.spins = []
+        self.pois = {"forts": {}, "pokemon": {}}
 
         self.last_move_time = time.time()
         self.change_dir_time = self.last_move_time + random.uniform(60,300)
@@ -242,22 +280,31 @@ class PoGoBot(object):
 
     def get_pois(self, delay):
         sys.stdout.write("Getting POIs...\n")
-        pois = {"pokemon": [], "forts": []}
         lat, lng, alt = self.api.get_position()
         cell_ids = self.get_cell_ids(lat, lng)
         timestamps = [0,] * len(cell_ids)
         ret = self.api.get_map_objects(latitude=lat, longitude=lng, since_timestamp_ms=timestamps, cell_id=cell_ids)
+        newpokemon = 0
+        newforts = 0
         if ret and ret["responses"] and "GET_MAP_OBJECTS" in ret["responses"] and ret["responses"]["GET_MAP_OBJECTS"]["status"] == 1:
             for map_cell in ret["responses"]["GET_MAP_OBJECTS"]["map_cells"]:
                 if "wild_pokemons" in map_cell:
                     for pokemon in map_cell["wild_pokemons"]:
-                        pois["pokemon"].append(pokemon)
+                        pid = get_key_from_pokemon(pokemon)
+                        if not pid in self.pois["pokemon"]:
+                            self.pois["pokemon"][pid] = pokemon
+                            newpokemon += 1
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
-                        pois['forts'].append(fort)
-        self.pois = pois
+                        if point_in_poly(fort["latitude"], fort["longitude"], self.config["bounds"]):
+                            if not fort["id"] in self.pois['forts']:
+                                self.pois['forts'][fort["id"]] = fort
+                                newforts += 1
+        if newpokemon > 0:
+            sys.stdout.write("  Found %d new pokemon.\n" % newpokemon)
+        if newforts > 0:
+            sys.stdout.write("  Found %d new forts.\n" % newforts)
         time.sleep(delay)
-
 
     def spin_forts(self, delay):
         sys.stdout.write("Spinning forts...\n")
@@ -353,7 +400,7 @@ class PoGoBot(object):
     def catch_wild_pokemon(self, delay):
         sys.stdout.write("Catching wild pokemon...\n")
         lat, lng, alt = self.api.get_position()
-        for pokemon in self.pois["pokemon"]:
+        for _, pokemon in self.pois["pokemon"].iteritems():
             ret = self.api.encounter(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
             if self.check_status_code(ret, 1) and ret["responses"]["ENCOUNTER"]["status"] == 1:
                 pokemon = ret["responses"]["ENCOUNTER"]
@@ -385,7 +432,7 @@ class PoGoBot(object):
         while True:
             newlat = lat + pymath.cos(self.angle) * r
             newlng = lng + pymath.sin(self.angle) * r
-            if not self.point_in_poly(newlat, newlng, self.config["bounds"]):
+            if not point_in_poly(newlat, newlng, self.config["bounds"]):
                 self.angle = self.angle + 180 + random.gauss(0,60)
             else:
                 break
@@ -413,6 +460,8 @@ class PoGoBot(object):
             map.add_point((lat, lng), "http://pokeapi.co/media/sprites/pokemon/%d.png" % pid)
         for spin in self.spins:
             map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
+        for _, fort in self.pois["forts"].iteritems():
+            map.add_point((fort['latitude'], fort['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/green-circle.png")
 
         with open("maptrace.html", "w") as out:
             print(map, file=out)
@@ -452,35 +501,6 @@ class PoGoBot(object):
         for i in range(100):
             ang = i/100 * pymath.pi * 2
             yield (x + r * pymath.cos(ang), y + r * pymath.sin(ang))
-
-    def point_in_poly(self, x, y, poly):
-        if (x,y) in poly: return True
-        for i in range(len(poly)):
-            p1 = None
-            p2 = None
-            if i==0:
-                p1 = poly[0]
-                p2 = poly[1]
-            else:
-                p1 = poly[i-1]
-                p2 = poly[i]
-            if p1[1] == p2[1] and p1[1] == y and x > min(p1[0], p2[0]) and x < max(p1[0], p2[0]):
-                return True
-        n = len(poly)
-        inside = False
-        p1x,p1y = poly[0]
-        for i in range(n+1):
-            p2x,p2y = poly[i % n]
-            if y > min(p1y,p2y):
-                if y <= max(p1y,p2y):
-                    if x <= max(p1x,p2x):
-                        if p1y != p2y:
-                            xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
-                        if p1x == p2x or x <= xints:
-                            inside = not inside
-            p1x,p1y = p2x,p2y
-        if inside: return True
-        else: return False
 
     def process_candies(self):
         sys.stdout.write("Processing candies...\n")
