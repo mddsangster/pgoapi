@@ -414,7 +414,7 @@ class PoGoBot(object):
         for spin in self.spins:
             map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
 
-        with open("maptrace.html", "w") as out:
+        with open("map.json", "w") as out:
             print(map, file=out)
 
     def save_config(self):
