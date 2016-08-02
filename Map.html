@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 100%; margin: 0; padding: 0 }
+      #map_canvas { height: 100% }
+    </style>
+    <script type="text/javascript"
+      src="http://maps.googleapis.com/maps/api/js?key=AIzaSyAzySCHttiNuoYo1ejFSExPPgAXMkEbU9w">
+    </script>
+    <script type="text/javascript" src="test.txt"></script>
+    <script type="text/javascript">
+      function load() {
+	       var mydata = JSON.parse(raw);
+	       var map;
+        google.maps.event.addDomListener(window, 'load', show_map(mydata))
+        }
+      function show_map(mydata) {
+        var centerlat = 0;
+        var centerlon = 0;
+        $.each(mydata[0].positions, function(data) {
+            centerlat += mydata[0].positions[data][0];
+            centerlon += mydata[0].positions[data][1];
+            });
+        var centerlat = centerlat/(mydata[0].positions.length);
+        var centerlon = centerlon/(mydata[0].positions.length);
+        var mapOptions = {
+            center: new google.maps.LatLng(centerlat, centerlon),
+            zoom: 16,
+            mapTypeId: google.maps.MapTypeId.ROADMAP
+        };
+        map = new google.maps.Map(document.getElementById("map_canvas"), mapOptions);
+        $.each(mydata[0].points, function(data) {
+            var latLng = new google.maps.LatLng(mydata[0].points[data][0][0], mydata[0].points[data][0][1]); 
+            // Creating a marker and putting it on the map
+            var marker = new google.maps.Marker({
+                position: latLng,
+                icon: mydata[0].points[data][1]
+            });
+            marker.setMap(map);
+            });
+        var boundCoords = []
+        $.each(mydata[0].bounds, function(data){
+            boundCoords.push(new google.maps.LatLng(lat = mydata[0].bounds[data][0], lng = mydata[0].bounds[data][1]))
+            });                     
+        var bound = new google.maps.Polyline({
+                path: boundCoords,
+                geodesic: true,
+                strokeColor: '#FF0000',
+                strokeOpacity: 0.5,
+                strokeWeight: 8});
+        bound.setMap(map);         
+        var walkPath = []
+        $.each(mydata[0].positions, function(data){
+            walkPath.push(new google.maps.LatLng(lat = mydata[0].positions[data][0], lng = mydata[0].positions[data][1]))
+            });    
+        var walk = new google.maps.Polyline({
+                path: walkPath,
+                geodesic: true,
+                strokeColor: '#7F00FF',
+                strokeOpacity: 0.5,
+                strokeWeight: 4});
+        walk.setMap(map); 
+        var playermarker = new google.maps.Marker({
+                        position: new google.maps.LatLng(mydata[0].player[0],mydata[0].player[1]),
+                        map: map
+                        });
+                        playermarker.setIcon('http://maps.google.com/mapfiles/ms/icons/purple.png');
+        var bounds = new google.maps.LatLngBounds();
+        var arrayLength = walkPath.length;
+        for (var i = 0; i < arrayLength; i++) {
+                        bounds.extend(walkPath[i]);
+                    }
+        map.fitBounds(bounds);
+        }    
+    </script>
+
+    <script type="text/javascript" src="http://code.jquery.com/jquery-latest.min.js"></script>    
+    <script>
+     var time = new Date().getTime();
+     $(document.body).bind("mousemove keypress", function(e) {
+         time = new Date().getTime();
+     });
+
+     function refresh() {
+         if(new Date().getTime() - time >= 10000) 
+             window.location.reload(true);
+         else 
+             setTimeout(refresh, 5000);
+     }
+
+     setTimeout(refresh, 10000);
+</script>
+  </head>
+  <body onload="load()">
+    <div id="map_canvas" style="width:100%; height:100%"></div>
+
+  </body>
+</html>
