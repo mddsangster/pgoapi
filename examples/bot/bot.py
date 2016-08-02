@@ -80,6 +80,7 @@ class PoGoBot(object):
         self.catches = []
         self.spins = []
         self.pois = {"forts": {}, "pokemon": {}}
+        self.spawnpoints = {}
 
         self.last_move_time = time.time()
         self.change_dir_time = self.last_move_time + random.uniform(60,300)
@@ -312,6 +313,8 @@ class PoGoBot(object):
         expired = 0
         for k, pokemon in self.pois["pokemon"].iteritems():
             if pokemon['time_till_hidden_ms'] <= time.time():
+                if not k in self.spawnpoints:
+                    self.spawnpoints[k] = self.pois["pokemon"][k]
                 del self.pois["pokemon"][k]
                 expired += 1
         if expired > 0:
@@ -473,6 +476,10 @@ class PoGoBot(object):
             map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
         for _, fort in self.pois["forts"].iteritems():
             map.add_point((fort['latitude'], fort['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/green-circle.png")
+        for _, pokemon in self.pois["pokemon"].iteritems():
+            map.add_point((pokemon['latitude'], pokemon['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/red-circle.png")
+        for _, sp in self.spawnpoints.iteritems():
+            map.add_point((sp['latitude'], sp['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/gray-circle.png")
 
         with open("maptrace.html", "w") as out:
             print(map, file=out)
