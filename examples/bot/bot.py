@@ -317,6 +317,7 @@ class PoGoBot(object):
             sys.stdout.write("  Found %d new pokemon.\n" % newpokemon)
         if newforts > 0:
             sys.stdout.write("  Found %d new forts.\n" % newforts)
+            self.path = []
         time.sleep(delay)
 
     def prune_expired_pokemon(self):
@@ -341,6 +342,8 @@ class PoGoBot(object):
                     ret = self.api.fort_search(fort_id=fort['id'], fort_latitude=fort['latitude'], fort_longitude=fort['longitude'], player_latitude=lat, player_longitude=lng)
                     if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
                         self.spins.append(fort)
+                        self.path = []
+                        self.visited[fort['id']] = (fort['id'], time.time() + 1200)
                         sys.stdout.write("  Spun fort and got:\n")
                         if "experience_awarded" in ret["responses"]["FORT_SEARCH"]:
                             xp = ret["responses"]["FORT_SEARCH"]["experience_awarded"]
@@ -454,10 +457,10 @@ class PoGoBot(object):
                 self.catch_pokemon(pokemon["encounter_id"], pokemon["encounter_location"], "incense", pokemon, self.balls, delay)
 
     def update_path(self):
+        sys.stdout.write("Updating path...\n")
         if len(self.path) == 0:
-            sys.stdout.write("Updating path...\n")
             lat, lng, alt = self.api.get_position()
-            coord = [(lat, lng)] + [(fort["latitude"], fort["longitude"]) for _,fort in self.pois["forts"].iteritems() if not fort["id"] in self.visited]
+            coord = [(lat, lng)] + [(fort["latitude"], fort["longitude"]) for _,fort in self.pois["forts"].iteritems() if not fort["id"] in self.visited and not "cooldown_complete_timestamp_ms" in fort]
             n, D = mk_matrix(coord, get_distance)
             for i in range(n):
                 tour = nearest_neighbor(n, i, D)
@@ -469,9 +472,12 @@ class PoGoBot(object):
             newpath = [fids[t] for t in tour]
             sys.stdout.write("  New path created...\n")
             self.path = newpath
-            # for _,v in self.visited.iteritems():
-            #     if v[1] < time.time():
-            #         del self.visited[v[0]]
+        remove = []
+        for _,v in self.visited.iteritems():
+            if v[1] < time.time():
+                remove.append(v[0])
+        for r in remove:
+            del self.visited[r]
 
     def move(self, mph=5):
         sys.stdout.write("Moving...\n")
@@ -676,7 +682,7 @@ class PoGoBot(object):
                     continue
             self.get_pois(delay)
             self.prune_expired_pokemon()
-            self.kill_time(5)
+            self.kill_time(6)
             if not self.config["nospin"]:
                 self.spin_forts(1)
             if not self.config["nocatch"]:
