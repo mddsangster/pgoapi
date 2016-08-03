@@ -14,7 +14,6 @@ import pgoapi.exceptions
 from s2sphere import LatLng, Angle, Cap, RegionCoverer, math
 
 from gmap import Map
-from tsp import mk_matrix, distL2, nearest_neighbor, length, localsearch
 
 def get_angle((x1, y1), (x2, y2)):
     return pymath.degrees(pymath.atan2(y2-y1, x2-x1))
@@ -451,6 +450,9 @@ class PoGoBot(object):
                 print(ret)
                 self.catch_pokemon(pokemon["encounter_id"], pokemon["encounter_location"], "incense", pokemon, self.balls, delay)
 
+    def update_path(self):
+        sys.stdout.write("Updating path...\n")
+
     def move(self, mph=5):
         sys.stdout.write("Moving...\n")
         now = time.time()
@@ -633,7 +635,6 @@ class PoGoBot(object):
         delay = 1
         while True:
             self.save_config()
-            self.save_map()
             hatched = self.get_hatched_eggs(delay)
             self.get_trainer_info(hatched, delay)
             self.get_rewards(delay)
@@ -656,6 +657,8 @@ class PoGoBot(object):
                 self.catch_incense_pokemon(delay)
             self.load_incubators()
             self.prune_inventory(delay)
+            self.update_path()
+            self.save_map()
             self.move(self.config["speed"])
 
     def run(self):
