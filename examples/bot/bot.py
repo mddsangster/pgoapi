@@ -310,15 +310,15 @@ class PoGoBot(object):
                         self.pois["pokemon"][pid] = pokemon
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
-                        if "type" in fort and fort["type"] == 1 and point_in_poly(fort["latitude"], fort["longitude"], self.config["bounds"]):
-                            if not fort["id"] in self.pois['pokestops']:
-                                newpokestops += 1
-                            # else:
-                            #     print("OLD", self.pois['pokestops'][fort["id"]])
-                            #     print("NEW", fort)
-                            self.pois['pokestops'][fort["id"]] = fort
-                        elif not "type" in fort:
-                            self.pois['gyms'][fort["id"]] = fort
+                        if point_in_poly(fort["latitude"], fort["longitude"], self.config["bounds"]):
+                            if "type" in fort and fort["type"] == 1:
+                                if not fort["id"] in self.pois['pokestops']:
+                                    newpokestops += 1
+                                self.pois['pokestops'][fort["id"]] = fort
+                            elif not "type" in fort:
+                                if not fort["id"] in self.pois['gyms']:
+                                    newgyms += 1
+                                self.pois['gyms'][fort["id"]] = fort
         if newpokemon > 0:
             sys.stdout.write("  Found %d new pokemon.\n" % newpokemon)
         if newpokestops > 0:
@@ -469,7 +469,9 @@ class PoGoBot(object):
 
     def update_path(self):
         sys.stdout.write("Updating path...\n")
-        print(self.visited)
+        if len(self.path) == 0:
+            self.visited = []
+            self.path_needs_update = True
         if self.path_needs_update:
             lat, lng, alt = self.api.get_position()
             coord = [(lat, lng)]
