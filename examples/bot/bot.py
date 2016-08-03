@@ -562,6 +562,8 @@ class PoGoBot(object):
             sys.stdout.write("Transfering pokemon...\n")
             transferable_pokemon = []
             for pid in self.inventory["pokemon"]:
+                if "whitelist" in self.config and pid in self.config["whitelist"]:
+                    continue
                 if pid in self.evolvables:
                     if pid not in self.enabled_evolutions:
                         for pokemon in self.inventory["pokemon"][pid]:
