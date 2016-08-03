@@ -14,6 +14,14 @@ import pgoapi.exceptions
 from s2sphere import LatLng, Angle, Cap, RegionCoverer, math
 
 from gmap import Map
+from tsp import mk_matrix, distL2, nearest_neighbor, length, localsearch
+
+def get_angle((x1, y1), (x2, y2)):
+    return pymath.degrees(pymath.atan2(y2-y1, x2-x1))
+
+def get_distance((x1, y1), (x2, y2)):
+    distance = pymath.sqrt(((x2-x1)**2)+((y2-y1)**2))
+    return distance
 
 def get_key_from_pokemon(pokemon):
     return '{}-{}'.format(pokemon['spawn_point_id'], pokemon['pokemon_data']['pokemon_id'])
@@ -293,15 +301,16 @@ class PoGoBot(object):
                     for pokemon in map_cell["wild_pokemons"]:
                         pid = get_key_from_pokemon(pokemon)
                         if not pid in self.pois["pokemon"]:
-                            pokemon['time_till_hidden_ms'] = time.time() + pokemon['time_till_hidden_ms']/1000
-                            self.pois["pokemon"][pid] = pokemon
                             newpokemon += 1
+                        pokemon['time_till_hidden_ms'] = time.time() + pokemon['time_till_hidden_ms']/1000
+                        self.pois["pokemon"][pid] = pokemon
+
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
                         if point_in_poly(fort["latitude"], fort["longitude"], self.config["bounds"]):
                             if not fort["id"] in self.pois['forts']:
-                                self.pois['forts'][fort["id"]] = fort
                                 newforts += 1
+                            self.pois['forts'][fort["id"]] = fort
         if newpokemon > 0:
             sys.stdout.write("  Found %d new pokemon.\n" % newpokemon)
         if newforts > 0:
@@ -310,22 +319,23 @@ class PoGoBot(object):
 
     def prune_expired_pokemon(self):
         sys.stdout.write("Pruning expired pokemon...\n")
-        expired = 0
+        expired = []
         for k, pokemon in self.pois["pokemon"].iteritems():
             if pokemon['time_till_hidden_ms'] <= time.time():
                 if not k in self.spawnpoints:
                     self.spawnpoints[k] = self.pois["pokemon"][k]
+                expired.append(k)
+        if len(expired) > 0:
+            for k in expired:
                 del self.pois["pokemon"][k]
-                expired += 1
-        if expired > 0:
-            sys.stdout.write("  %d pokemon expired.\n" % expired)
+            sys.stdout.write("  %d pokemon expired.\n" % len(expired))
 
     def spin_forts(self, delay):
         sys.stdout.write("Spinning forts...\n")
         lat, lng, alt = self.api.get_position()
-        for fort in self.pois["forts"]:
+        for _, fort in self.pois["forts"].iteritems():
             if "type" in fort and fort["type"] == 1 and not "cooldown_complete_timestamp_ms" in fort:
-                if pymath.hypot(fort['latitude'] - lat, fort['longitude'] - lng) < 0.0004495:
+                if get_distance((fort['latitude'], fort['longitude']), (lat, lng)) < 0.0004495:
                     ret = self.api.fort_search(fort_id=fort['id'], fort_latitude=fort['latitude'], fort_longitude=fort['longitude'], player_latitude=lat, player_longitude=lng)
                     if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
                         self.spins.append(fort)
@@ -347,7 +357,7 @@ class PoGoBot(object):
                                 sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
                     time.sleep(delay)
 
-    def catch_pokemon(self, pokemon, balls, delay):
+    def catch_pokemon(self, pokemon, balls, delay, upid=None):
         ret = True
         if "wild_pokemon" in pokemon:
             eid = pokemon["wild_pokemon"]["encounter_id"]
@@ -389,6 +399,8 @@ class PoGoBot(object):
                 if ret["responses"]["CATCH_POKEMON"]["status"] == 1:
                     sys.stdout.write("success.\n")
                     self.catches.append(pokemon)
+                    if upid:
+                        del self.pois["pokemon"][upid]
                     sys.stdout.write("      Experience: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["xp"]))
                     sys.stdout.write("      Stardust: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["stardust"]))
                     sys.stdout.write("      Candies: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["candy"]))
@@ -405,6 +417,8 @@ class PoGoBot(object):
                     time.sleep(delay)
                 elif ret["responses"]["CATCH_POKEMON"]["status"] == 3:
                     sys.stdout.write("flee.\n")
+                    if upid:
+                        del self.pois["pokemon"][upid]
                     break
                 elif ret["responses"]["CATCH_POKEMON"]["status"] == 4:
                     sys.stdout.write("missed.\n")
@@ -414,12 +428,12 @@ class PoGoBot(object):
     def catch_wild_pokemon(self, delay):
         sys.stdout.write("Catching wild pokemon...\n")
         lat, lng, alt = self.api.get_position()
-        for _, pokemon in self.pois["pokemon"].iteritems():
+        for pid, pokemon in self.pois["pokemon"].iteritems():
             ret = self.api.encounter(encounter_id=pokemon['encounter_id'], spawn_point_id=pokemon['spawn_point_id'], player_latitude = lat, player_longitude = lng)
             if self.check_status_code(ret, 1) and ret["responses"]["ENCOUNTER"]["status"] == 1:
                 pokemon = ret["responses"]["ENCOUNTER"]
                 time.sleep(delay)
-                if not self.catch_pokemon(pokemon, self.balls, delay):
+                if not self.catch_pokemon(pokemon, self.balls, delay, pid):
                     break
             else:
                 print(ret)
