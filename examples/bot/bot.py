@@ -14,8 +14,9 @@ import pgoapi.exceptions
 from s2sphere import LatLng, Angle, Cap, RegionCoverer, math
 
 from gmap import Map
+from tsp import mk_matrix, nearest_neighbor, length, localsearch
 
-def get_angle((x1, y1), (x2, y2)):
+def get_angle((y1, x1), (y2, x2)):
     return pymath.degrees(pymath.atan2(y2-y1, x2-x1))
 
 def get_distance((x1, y1), (x2, y2)):
@@ -88,6 +89,8 @@ class PoGoBot(object):
         self.spins = []
         self.pois = {"forts": {}, "pokemon": {}}
         self.spawnpoints = {}
+        self.path = []
+        self.visited = {}
 
         self.last_move_time = time.time()
         self.change_dir_time = self.last_move_time + random.uniform(60,300)
@@ -451,7 +454,24 @@ class PoGoBot(object):
                 self.catch_pokemon(pokemon["encounter_id"], pokemon["encounter_location"], "incense", pokemon, self.balls, delay)
 
     def update_path(self):
-        sys.stdout.write("Updating path...\n")
+        if len(self.path) == 0:
+            sys.stdout.write("Updating path...\n")
+            lat, lng, alt = self.api.get_position()
+            coord = [(lat, lng)] + [(fort["latitude"], fort["longitude"]) for _,fort in self.pois["forts"].iteritems() if not fort["id"] in self.visited]
+            n, D = mk_matrix(coord, get_distance)
+            for i in range(n):
+                tour = nearest_neighbor(n, i, D)
+                z = length(tour, D)
+                z = localsearch(tour, z, D)
+            tour.remove(0)
+            tour[:] = [t-1 for t in tour]
+            fids = self.pois["forts"].keys()
+            newpath = [fids[t] for t in tour]
+            sys.stdout.write("  New path created...\n")
+            self.path = newpath
+            # for _,v in self.visited.iteritems():
+            #     if v[1] < time.time():
+            #         del self.visited[v[0]]
 
     def move(self, mph=5):
         sys.stdout.write("Moving...\n")
@@ -459,13 +479,18 @@ class PoGoBot(object):
         delta = now - self.last_move_time
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
-        while True:
-            newlat = lat + pymath.cos(self.angle) * r
-            newlng = lng + pymath.sin(self.angle) * r
-            if not point_in_poly(newlat, newlng, self.config["bounds"]):
-                self.angle = self.angle + 180 + random.gauss(0,60)
-            else:
-                break
+        target = self.pois["forts"][self.path[0]]
+        self.angle = get_angle((lat, lng), (target["latitude"], target["longitude"]))
+        sys.stdout.write("  Current path has %d destinations...\n" % len(self.path))
+        sys.stdout.write("  Heading towards %s at an angle of %.2f...\n" % (self.path[0], self.angle))
+        if get_distance((lng, lat), (target["longitude"], target["latitude"])) < r:
+            newlat = target["latitude"]
+            newlng = target["longitude"]
+            fid = self.path.pop(0)
+            self.visited[fid] = (fid, time.time() + 1200)
+        else:
+            newlat = lat + pymath.sin(pymath.radians(self.angle)) * r
+            newlng = lng + pymath.cos(pymath.radians(self.angle)) * r
         self.api.set_position(newlat, newlng, alt)
         self.coords.append({'latitude': newlat, 'longitude': newlng})
         self.last_move_time = now
@@ -496,6 +521,9 @@ class PoGoBot(object):
             map.add_point((pokemon['latitude'], pokemon['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/red-circle.png")
         for _, sp in self.spawnpoints.iteritems():
             map.add_point((sp['latitude'], sp['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/gray-circle.png")
+        if len(self.path) > 0:
+            target = self.pois["forts"][self.path[0]]
+            map.add_point((target['latitude'], target['longitude']), "http://maps.google.com/mapfiles/ms/icons/green.png")
 
         with open("maptrace.html", "w") as out:
             print(map, file=out)
@@ -646,10 +674,9 @@ class PoGoBot(object):
                 if self.transfer_pokemon(delay):
                     self.last_move_time = time.time()
                     continue
-            self.kill_time(5)
             self.get_pois(delay)
             self.prune_expired_pokemon()
-            self.kill_time(10)
+            self.kill_time(5)
             if not self.config["nospin"]:
                 self.spin_forts(1)
             if not self.config["nocatch"]:
