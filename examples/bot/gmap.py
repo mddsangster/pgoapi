@@ -58,9 +58,9 @@ class Map(object):
                     {markersCode}
                     {playerCode}
                     var bounds = new google.maps.LatLngBounds();
-                    var arrayLength = walkPathCoords.length;
+                    var arrayLength = boundsCoords.length;
                     for (var i = 0; i < arrayLength; i++) {{
-                        bounds.extend(walkPathCoords[i]);
+                        bounds.extend(boundsCoords[i]);
                     }}
                     map.fitBounds(bounds);
                 }}

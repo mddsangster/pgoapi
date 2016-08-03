@@ -90,8 +90,9 @@ class PoGoBot(object):
         self.pois = {"pokestops": {}, "gyms": {}, "pokemon": {}}
         self.spawnpoints = {}
         self.path = []
-        self.visited = []
-        self.path_needs_update = True
+        self.visited = {}
+        self.path_needs_update = []
+        self.target = None
 
         self.last_move_time = time.time()
         self.change_dir_time = self.last_move_time + random.uniform(60,300)
@@ -350,11 +351,9 @@ class PoGoBot(object):
                     ret = self.api.fort_search(fort_id=pokestop['id'], fort_latitude=pokestop['latitude'], fort_longitude=pokestop['longitude'], player_latitude=lat, player_longitude=lng)
                     if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
                         self.spins.append(pokestop)
+                        self.visited[pokestop["id"]] = time.time()
                         if pokestop["id"] in self.path:
-                            self.visited.append(pokestop["id"])
-                            if self.path[0] == pokestop["id"]:
-                                self.path_needs_update = True
-                            self.path.remove(pokestop["id"])
+                            self.path_needs_update.append(pokestop["id"])
                         sys.stdout.write("  Spun pokestop and got:\n")
                         if "experience_awarded" in ret["responses"]["FORT_SEARCH"]:
                             xp = ret["responses"]["FORT_SEARCH"]["experience_awarded"]
@@ -470,9 +469,11 @@ class PoGoBot(object):
     def update_path(self):
         sys.stdout.write("Updating path...\n")
         if len(self.path) == 0:
-            self.visited = []
-            self.path_needs_update = True
-        if self.path_needs_update:
+            self.visited = {}
+            self.path_needs_update = []
+            self.target = None
+        print("OLD", self.target)
+        if len(self.path) == 0 or len(self.path_needs_update) > 0:
             lat, lng, alt = self.api.get_position()
             coord = [(lat, lng)]
             for _,pokestop in self.pois["pokestops"].iteritems():
@@ -489,8 +490,14 @@ class PoGoBot(object):
             fids = self.pois["pokestops"].keys()
             newpath = [fids[t] for t in tour]
             sys.stdout.write("  New path created...\n")
+
             self.path = newpath
-            self.path_needs_update = False
+            self.path_needs_update = []
+            if self.target in self.path:
+                print("FUCK")
+                self.path.remove(self.target)
+            self.target = self.path[0]
+        print("NEW", self.target)
 
     def move(self, mph=5):
         sys.stdout.write("Moving...\n")
@@ -498,16 +505,15 @@ class PoGoBot(object):
         delta = now - self.last_move_time
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
-        target = self.pois["pokestops"][self.path[0]]
+        target = self.pois["pokestops"][self.target]
         self.angle = get_angle((lat, lng), (target["latitude"], target["longitude"]))
         sys.stdout.write("  Current path has %d destinations...\n" % len(self.path))
-        sys.stdout.write("  Heading towards %s at an angle of %.2f...\n" % (self.path[0], self.angle))
+        sys.stdout.write("  Heading towards %s at an angle of %.2f...\n" % (self.target, self.angle))
         if get_distance((lng, lat), (target["longitude"], target["latitude"])) < r:
             newlat = target["latitude"]
             newlng = target["longitude"]
-            fid = self.path.pop(0)
-            self.visited.append(fid)
-            self.path_needs_update = True
+            self.visited[self.target] = time.time()
+            self.path_needs_update.append(self.target)
         else:
             newlat = lat + pymath.sin(pymath.radians(self.angle)) * r
             newlng = lng + pymath.cos(pymath.radians(self.angle)) * r
@@ -549,7 +555,7 @@ class PoGoBot(object):
         # for _, sp in self.spawnpoints.iteritems():
         #     map.add_point((sp['latitude'], sp['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/gray-circle.png")
         if len(self.path) > 0:
-            target = self.pois["pokestops"][self.path[0]]
+            target = self.pois["pokestops"][self.target]
             map.add_point((target['latitude'], target['longitude']), "http://maps.google.com/mapfiles/ms/icons/green.png")
 
         with open("maptrace.html", "w") as out:
