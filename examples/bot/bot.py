@@ -6,6 +6,7 @@ import time
 import json
 import math as pymath
 import random
+import numpy as np
 
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../.."))
 from pgoapi import pgoapi
@@ -68,6 +69,10 @@ class PoGoBot(object):
         self.unsoftban = 0
         self.api = pgoapi.PGoApi()
         self.api.set_position(*self.config["location"])
+        self.api.set_authentication(provider=self.config["auth_service"],
+                                    username=self.config["username"],
+                                    password=self.config["password"])
+        self.api.activate_signature("encrypt.dll")
         self.angle = random.uniform(0,360)
 
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/pokemon.json"), "r") as infile:
@@ -91,34 +96,14 @@ class PoGoBot(object):
         self.spawnpoints = {}
         self.path = []
         self.visited = {}
-        self.path_needs_update = []
         self.target = None
+        self.inventory = self.empty_inventory()
 
         self.last_move_time = time.time()
         self.change_dir_time = self.last_move_time + random.uniform(60,300)
 
     def pokemon_id_to_name(self, id):
         return (list(filter(lambda j: int(j['Number']) == id, self.pokemon_info))[0]['Name'])
-
-    def login(self, retries=-1):
-        ret = False
-        attempts = 0
-        while True:
-            sys.stdout.write("Performing authentication (attempt %d)..." % (attempts+1))
-            if not self.api.login(self.config["auth_service"],
-                                  self.config["username"],
-                                  self.config["password"]):
-                sys.stdout.write("failed.\n")
-                attempts += 1
-                if retries>=0 and attempts < retries:
-                    time.sleep(1)
-                else:
-                    break
-            else:
-                sys.stdout.write("succeeded.\n")
-                ret = True
-                break
-        return ret
 
     def process_player(self, player):
         self.player = player["player_data"]
@@ -136,16 +121,18 @@ class PoGoBot(object):
             if il in self.inventory["items"] and self.inventory["items"][il] > self.config[limit][il]:
                 count = self.inventory["items"][il] - self.config[limit][il]
                 ret = self.api.recycle_inventory_item(item_id=int(il), count=count)
-                if ret and "RECYCLE_INVENTORY_ITEM" in ret['responses'] and ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
+                if self.check_status_code(ret, 1) and ret["responses"]['RECYCLE_INVENTORY_ITEM']["result"] == 1:
                     if first:
                         sys.stdout.write("  %s max inventory...\n" % status)
                         sys.stdout.write("    Recycled:\n")
                         first = False
                     sys.stdout.write("      %d x %s\n" % (count, self.item_names[il]))
+                else:
+                    print(ret)
                 time.sleep(delay)
 
-    def process_inventory(self, inventory):
-        ni = {
+    def empty_inventory(self):
+        return {
             "items": {},
             "candies": {},
             "pokemon": {},
@@ -154,6 +141,9 @@ class PoGoBot(object):
             "applied": [],
             "incubators": []
         }
+
+    def process_inventory(self, inventory):
+        ni = self.empty_inventory()
         balls = []
         mon = 0
         for item in inventory["inventory_delta"]["inventory_items"]:
@@ -296,6 +286,7 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         cell_ids = self.get_cell_ids(lat, lng)
         timestamps = [0,] * len(cell_ids)
+
         ret = self.api.get_map_objects(latitude=lat, longitude=lng, since_timestamp_ms=timestamps, cell_id=cell_ids)
         newpokemon = 0
         newpokestops = 0
@@ -341,6 +332,33 @@ class PoGoBot(object):
                 del self.pois["pokemon"][k]
             sys.stdout.write("  %d pokemon expired.\n" % len(expired))
 
+    def spin_pokestop(self, pokestop, lat, lng, alt, delay):
+        status = 0
+        ret = self.api.fort_search(fort_id=pokestop['id'], fort_latitude=pokestop['latitude'], fort_longitude=pokestop['longitude'], player_latitude=lat, player_longitude=lng)
+        if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
+            if "experience_awarded" in ret["responses"]["FORT_SEARCH"]:
+                self.spins.append(pokestop)
+                self.visited[pokestop["id"]] = time.time()
+                if pokestop["id"] ==  self.target:
+                    self.target = None
+                sys.stdout.write("  Spun pokestop and got:\n")
+                xp = ret["responses"]["FORT_SEARCH"]["experience_awarded"]
+                sys.stdout.write("    Experience: %d\n" % xp)
+                if "items_awarded" in ret["responses"]["FORT_SEARCH"]:
+                    sys.stdout.write("    Items:\n")
+                    ni = {}
+                    for item in ret["responses"]["FORT_SEARCH"]["items_awarded"]:
+                        if not item["item_id"] in ni:
+                            ni[item["item_id"]] = 1
+                        else:
+                            ni[item["item_id"]] += 1
+                    for item in ni:
+                        sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
+                status = 1
+            else:
+                status = -1
+        return status
+
     def spin_pokestops(self, delay):
         sys.stdout.write("Spinning pokestops...\n")
         lat, lng, alt = self.api.get_position()
@@ -348,29 +366,17 @@ class PoGoBot(object):
         for _, pokestop in self.pois["pokestops"].iteritems():
             if not "cooldown_complete_timestamp_ms" in pokestop:
                 if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004495:
-                    ret = self.api.fort_search(fort_id=pokestop['id'], fort_latitude=pokestop['latitude'], fort_longitude=pokestop['longitude'], player_latitude=lat, player_longitude=lng)
-                    if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
-                        self.spins.append(pokestop)
-                        self.visited[pokestop["id"]] = time.time()
-                        if pokestop["id"] in self.path:
-                            self.path_needs_update.append(pokestop["id"])
-                        sys.stdout.write("  Spun pokestop and got:\n")
-                        if "experience_awarded" in ret["responses"]["FORT_SEARCH"]:
-                            xp = ret["responses"]["FORT_SEARCH"]["experience_awarded"]
-                        else:
-                            xp = 0
-                        sys.stdout.write("    Experience: %d\n" % xp)
-                        if "items_awarded" in ret["responses"]["FORT_SEARCH"]:
-                            sys.stdout.write("    Items:\n")
-                            ni = {}
-                            for item in ret["responses"]["FORT_SEARCH"]["items_awarded"]:
-                                if not item["item_id"] in ni:
-                                    ni[item["item_id"]] = 1
-                                else:
-                                    ni[item["item_id"]] += 1
-                            for item in ni:
-                                sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
+                    s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                     time.sleep(delay)
+                    if s == -1:
+                        sys.stdout.write("  Softban detected, attempting 40 spin fix.\n")
+                        for i in xrange(40):
+                            sys.stdout.write("    Spin %d...\n" % i)
+                            s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
+                            time.sleep(delay)
+                            if s == 1:
+                                break
+
 
     def catch_pokemon(self, pokemon, balls, delay, upid=None):
         ret = True
@@ -458,46 +464,45 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         ret = self.api.get_incense_pokemon(player_latitude=lat, player_longitude=lng)
         time.sleep(delay)
-        if ret and "GET_INCENSE_POKEMON" in ret["responses"] and ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
+        if self.check_status_code(ret, 1) and ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
             pokemon = ret["responses"]["GET_INCENSE_POKEMON"]
             ret = self.api.incense_encounter(encounter_id=pokemon["encounter_id"], encounter_location=pokemon["encounter_location"])
             time.sleep(delay)
             if self.check_status_code(ret, 1) and ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 1:
                 print(ret)
                 self.catch_pokemon(pokemon["encounter_id"], pokemon["encounter_location"], "incense", pokemon, self.balls, delay)
+        else:
+            print(ret)
 
     def update_path(self):
         sys.stdout.write("Updating path...\n")
-        if len(self.path) == 0:
-            self.visited = {}
-            self.path_needs_update = []
-            self.target = None
-        print("OLD", self.target)
-        if len(self.path) == 0 or len(self.path_needs_update) > 0:
+        if self.target == None:
+            sys.stdout.write("  Picking new target...\n")
             lat, lng, alt = self.api.get_position()
             coord = [(lat, lng)]
-            for _,pokestop in self.pois["pokestops"].iteritems():
+            fids = []
+            for fid, pokestop in self.pois["pokestops"].iteritems():
                 if not pokestop["id"] in self.visited:
-                    if not "cooldown_complete_timestamp_ms" in pokestop:
-                        coord.append((pokestop["latitude"], pokestop["longitude"]))
-            n, D = mk_matrix(coord, get_distance)
-            for i in range(n):
-                tour = nearest_neighbor(n, i, D)
-                z = length(tour, D)
-                z = localsearch(tour, z, D)
-            tour.remove(0)
-            tour[:] = [t-1 for t in tour]
-            fids = self.pois["pokestops"].keys()
-            newpath = [fids[t] for t in tour]
-            sys.stdout.write("  New path created...\n")
-
-            self.path = newpath
-            self.path_needs_update = []
-            if self.target in self.path:
-                print("FUCK")
-                self.path.remove(self.target)
-            self.target = self.path[0]
-        print("NEW", self.target)
+                    fids.append(fid)
+                    coord.append((pokestop["latitude"], pokestop["longitude"]))
+            if len(fids) > 0:
+                n, D = mk_matrix(coord, get_distance)
+                tour = nearest_neighbor(n, 0, D)
+                tour.remove(0)
+                tour[:] = [t-1 for t in tour]
+                i =  np.random.poisson(self.config["noise"],1)[0]
+                l = len(fids)
+                if i > l:
+                    i = l
+                self.target = fids[i]
+            else:
+                self.target = None
+        remove = []
+        for k,v in self.visited.iteritems():
+            if v + self.config["revisit"] <= time.time():
+                remove.append(k)
+        for k in remove:
+            del self.visited[k]
 
     def move(self, mph=5):
         sys.stdout.write("Moving...\n")
@@ -505,15 +510,16 @@ class PoGoBot(object):
         delta = now - self.last_move_time
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
-        target = self.pois["pokestops"][self.target]
-        self.angle = get_angle((lat, lng), (target["latitude"], target["longitude"]))
-        sys.stdout.write("  Current path has %d destinations...\n" % len(self.path))
-        sys.stdout.write("  Heading towards %s at an angle of %.2f...\n" % (self.target, self.angle))
-        if get_distance((lng, lat), (target["longitude"], target["latitude"])) < r:
+        if self.target != None:
+            target = self.pois["pokestops"][self.target]
+            self.angle = get_angle((lat, lng), (target["latitude"], target["longitude"]))
+        else:
+            self.angle = random.uniform(0,360)
+        if self.target != None and get_distance((lng, lat), (target["longitude"], target["latitude"])) < r:
             newlat = target["latitude"]
             newlng = target["longitude"]
             self.visited[self.target] = time.time()
-            self.path_needs_update.append(self.target)
+            self.target = None
         else:
             newlat = lat + pymath.sin(pymath.radians(self.angle)) * r
             newlng = lng + pymath.cos(pymath.radians(self.angle)) * r
@@ -544,17 +550,15 @@ class PoGoBot(object):
         for _, pokestop in self.pois["pokestops"].iteritems():
             if pokestop["id"] in self.visited:
                 map.add_point((pokestop['latitude'], pokestop['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/red-circle.png")
-            elif pokestop["id"] in self.path:
-                map.add_point((pokestop['latitude'], pokestop['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/green-circle.png")
             else:
-                map.add_point((pokestop['latitude'], pokestop['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/gray-circle.png")
+                map.add_point((pokestop['latitude'], pokestop['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/green-circle.png")
         for _, gym in self.pois["gyms"].iteritems():
-            map.add_point((gym['latitude'], gym['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/dull-blue-circle.png")
+            map.add_point((gym['latitude'], gym['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/blue-circle.png")
         # for _, pokemon in self.pois["pokemon"].iteritems():
         #     map.add_point((pokemon['latitude'], pokemon['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/red-circle.png")
         # for _, sp in self.spawnpoints.iteritems():
         #     map.add_point((sp['latitude'], sp['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/gray-circle.png")
-        if len(self.path) > 0:
+        if self.target != None:
             target = self.pois["pokestops"][self.target]
             map.add_point((target['latitude'], target['longitude']), "http://maps.google.com/mapfiles/ms/icons/green.png")
 
@@ -694,6 +698,7 @@ class PoGoBot(object):
 
     def play(self):
         delay = 1
+        i = 0
         while True:
             self.save_config()
             hatched = self.get_hatched_eggs(delay)
@@ -707,9 +712,10 @@ class PoGoBot(object):
                 if self.transfer_pokemon(delay):
                     self.last_move_time = time.time()
                     continue
-            self.get_pois(delay)
+            if i % 3 == 0:
+                self.get_pois(delay)
             self.prune_expired_pokemon()
-            self.kill_time(6)
+            self.kill_time(10)
             if not self.config["nospin"]:
                 self.spin_pokestops(1)
             if not self.config["nocatch"]:
@@ -720,11 +726,7 @@ class PoGoBot(object):
             self.update_path()
             self.save_map()
             self.move(self.config["speed"])
+            i += 1
 
     def run(self):
-        while True:
-            try:
-                self.login()
-                self.play()
-            except pgoapi.exceptions.NotLoggedInException:
-                pass
+        self.play()
