@@ -15,7 +15,7 @@ import pgoapi.exceptions
 from s2sphere import LatLng, Angle, Cap, RegionCoverer, math
 
 from gmap import Map
-from tsp import mk_matrix, nearest_neighbor, length, localsearch
+from tsp import mk_matrix, nearest_neighbor, length, localsearch, multistart_localsearch
 
 def get_angle((y1, x1), (y2, x2)):
     return pymath.degrees(pymath.atan2(y2-y1, x2-x1))
@@ -96,7 +96,6 @@ class PoGoBot(object):
         self.spawnpoints = {}
         self.path = []
         self.visited = {}
-        self.target = None
         self.inventory = self.empty_inventory()
 
         self.last_move_time = time.time()
@@ -335,12 +334,12 @@ class PoGoBot(object):
     def spin_pokestop(self, pokestop, lat, lng, alt, delay):
         status = 0
         ret = self.api.fort_search(fort_id=pokestop['id'], fort_latitude=pokestop['latitude'], fort_longitude=pokestop['longitude'], player_latitude=lat, player_longitude=lng)
-        if ret and ret["responses"] and "FORT_SEARCH" in ret["responses"] and ret["responses"]["FORT_SEARCH"]["result"] == 1:
+        if self.check_status_code(ret, 1):
             if "experience_awarded" in ret["responses"]["FORT_SEARCH"]:
                 self.spins.append(pokestop)
                 self.visited[pokestop["id"]] = time.time()
-                if pokestop["id"] ==  self.target:
-                    self.target = None
+                if pokestop["id"] in self.path:
+                    self.path.remove(pokestop["id"])
                 sys.stdout.write("  Spun pokestop and got:\n")
                 xp = ret["responses"]["FORT_SEARCH"]["experience_awarded"]
                 sys.stdout.write("    Experience: %d\n" % xp)
@@ -356,7 +355,12 @@ class PoGoBot(object):
                         sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
                 status = 1
             else:
-                status = -1
+                if ret["responses"]["FORT_SEARCH"]["result"] == 3:
+                    print(pokestop)
+                elif len(ret["responses"]["FORT_SEARCH"].keys()) == 1 and ret["responses"]["FORT_SEARCH"]["result"] == 1:
+                    status = -1
+        else:
+            print(ret)
         return status
 
     def spin_pokestops(self, delay):
@@ -364,14 +368,14 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         path_resets = 0
         for _, pokestop in self.pois["pokestops"].iteritems():
-            if not "cooldown_complete_timestamp_ms" in pokestop:
-                if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004495:
+            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004494:
+                if not "cooldown_complete_timestamp_ms" in pokestop:
                     s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                     time.sleep(delay)
                     if s == -1:
                         sys.stdout.write("  Softban detected, attempting 40 spin fix.\n")
                         for i in xrange(40):
-                            sys.stdout.write("    Spin %d...\n" % i)
+                            sys.stdout.write("    Spin %d...\n" % (i+1))
                             s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                             time.sleep(delay)
                             if s == 1:
@@ -476,27 +480,22 @@ class PoGoBot(object):
 
     def update_path(self):
         sys.stdout.write("Updating path...\n")
-        if self.target == None:
-            sys.stdout.write("  Picking new target...\n")
-            lat, lng, alt = self.api.get_position()
+        lat, lng, alt = self.api.get_position()
+        if len(self.path) == 0:
+            sys.stdout.write("  Generating new tour...\n")
             coord = [(lat, lng)]
             fids = []
             for fid, pokestop in self.pois["pokestops"].iteritems():
-                if not pokestop["id"] in self.visited:
+                if not pokestop["id"] in self.visited and not "cooldown_complete_timestamp_ms" in pokestop:
                     fids.append(fid)
                     coord.append((pokestop["latitude"], pokestop["longitude"]))
-            if len(fids) > 0:
+            l = len(fids)
+            if l > 0:
                 n, D = mk_matrix(coord, get_distance)
                 tour = nearest_neighbor(n, 0, D)
                 tour.remove(0)
                 tour[:] = [t-1 for t in tour]
-                i =  np.random.poisson(self.config["noise"],1)[0]
-                l = len(fids)
-                if i > l:
-                    i = l
-                self.target = fids[i]
-            else:
-                self.target = None
+                self.path = [fids[t] for t in tour]
         remove = []
         for k,v in self.visited.iteritems():
             if v + self.config["revisit"] <= time.time():
@@ -510,21 +509,38 @@ class PoGoBot(object):
         delta = now - self.last_move_time
         lat, lng, alt = self.api.get_position()
         r = 1.0/69.0/60.0/60.0*mph*delta
-        if self.target != None:
-            target = self.pois["pokestops"][self.target]
-            self.angle = get_angle((lat, lng), (target["latitude"], target["longitude"]))
+        if len(self.pois["pokemon"]) > 0:
+            sys.stdout.write("  Heading towards nearby wild pokemon...\n")
+            nearest = (None, float("inf"))
+            for pid, pokemon in self.pois["pokemon"].iteritems():
+                d = get_distance((pokemon['latitude'], pokemon['longitude']), (lat, lng))
+                if d < nearest[1]:
+                    nearest = (pokemon, d)
+            if nearest[1] < r:
+                lat = nearest[0]["latitude"]
+                lng = nearest[0]["longitude"]
+            else:
+                self.angle = get_angle((lat, lng), (nearest[0]["latitude"], nearest[0]["longitude"]))
+                lat = lat + pymath.sin(pymath.radians(self.angle)) * r
+                lng = lng + pymath.cos(pymath.radians(self.angle)) * r
         else:
-            self.angle = random.uniform(0,360)
-        if self.target != None and get_distance((lng, lat), (target["longitude"], target["latitude"])) < r:
-            newlat = target["latitude"]
-            newlng = target["longitude"]
-            self.visited[self.target] = time.time()
-            self.target = None
-        else:
-            newlat = lat + pymath.sin(pymath.radians(self.angle)) * r
-            newlng = lng + pymath.cos(pymath.radians(self.angle)) * r
-        self.api.set_position(newlat, newlng, alt)
-        self.coords.append({'latitude': newlat, 'longitude': newlng})
+            sys.stdout.write("  Heading to a pokestop...\n")
+            if len(self.path) > 0:
+                target = self.pois["pokestops"][self.path[0]]
+                self.angle = get_angle((lat, lng), (target["latitude"], target["longitude"]))
+            else:
+                self.angle = random.uniform(0,360)
+            if len(self.path) > 0 and get_distance((lng, lat), (target["longitude"], target["latitude"])) < r:
+                lat = target["latitude"]
+                lng = target["longitude"]
+                sys.stdout.write("    Visited a pokestop...\n")
+                self.visited[self.path[0]] = time.time()
+                self.path.pop(0)
+            else:
+                lat = lat + pymath.sin(pymath.radians(self.angle)) * r
+                lng = lng + pymath.cos(pymath.radians(self.angle)) * r
+        self.api.set_position(lat, lng, alt)
+        self.coords.append({'latitude': lat, 'longitude': lng})
         self.last_move_time = now
 
     def save_map(self):
@@ -558,8 +574,8 @@ class PoGoBot(object):
         #     map.add_point((pokemon['latitude'], pokemon['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/red-circle.png")
         # for _, sp in self.spawnpoints.iteritems():
         #     map.add_point((sp['latitude'], sp['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/gray-circle.png")
-        if self.target != None:
-            target = self.pois["pokestops"][self.target]
+        if len(self.path) > 0:
+            target = self.pois["pokestops"][self.path[0]]
             map.add_point((target['latitude'], target['longitude']), "http://maps.google.com/mapfiles/ms/icons/green.png")
 
         with open("maptrace.html", "w") as out:
@@ -712,15 +728,16 @@ class PoGoBot(object):
                 if self.transfer_pokemon(delay):
                     self.last_move_time = time.time()
                     continue
+            self.kill_time(20)
             if i % 3 == 0:
                 self.get_pois(delay)
             self.prune_expired_pokemon()
-            self.kill_time(10)
+            #self.kill_time(15)
             if not self.config["nospin"]:
                 self.spin_pokestops(1)
             if not self.config["nocatch"]:
                 self.catch_wild_pokemon(delay)
-                self.catch_incense_pokemon(delay)
+                #self.catch_incense_pokemon(delay)
             self.load_incubators()
             self.prune_inventory(delay)
             self.update_path()
