@@ -280,11 +280,11 @@ class PoGoBot(object):
     def get_pois(self, delay):
         sys.stdout.write("Getting POIs...\n")
         lat, lng, alt = self.api.get_position()
-        level = random.randint(12,18)
+        level = random.randint(15,18)
         if not level in self.scan_stats:
             self.scan_stats[level] = {"wild_pokemons": 0}
         sys.stdout.write("  Scanning level %d...\n" % level)
-        cell_ids = self.get_cell_ids(lat, lng)
+        cell_ids = self.get_cell_ids(lat, lng, radius=self.config["radius"])
         timestamps = [0,] * len(cell_ids)
         ret = self.api.get_map_objects(latitude=lat, longitude=lng, since_timestamp_ms=timestamps, cell_id=cell_ids)
         newpokemon = 0
@@ -303,17 +303,20 @@ class PoGoBot(object):
                         self.pois["pokemon"][pid] = pokemon
                 if 'forts' in map_cell:
                     for fort in map_cell['forts']:
-                        if point_in_poly(fort["latitude"], fort["longitude"], self.config["bounds"]):
-                            if "type" in fort and fort["type"] == 1:
-                                if not fort["id"] in self.pois['pokestops']:
-                                    newpokestops += 1
-                                self.pois['pokestops'][fort["id"]] = fort
-                            elif not "type" in fort:
-                                if not fort["id"] in self.pois['gyms']:
-                                    newgyms += 1
-                                self.pois['gyms'][fort["id"]] = fort
+                        if "bounds" in self.config and not point_in_poly(fort["latitude"], fort["longitude"], self.config["bounds"]):
+                            continue
+                        if "type" in fort and fort["type"] == 1:
+                            if not fort["id"] in self.pois['pokestops']:
+                                newpokestops += 1
+                            self.pois['pokestops'][fort["id"]] = fort
+                        elif not "type" in fort:
+                            if not fort["id"] in self.pois['gyms']:
+                                newgyms += 1
+                            self.pois['gyms'][fort["id"]] = fort
                 if 'spawn_points' in map_cell:
                     for sp in map_cell['spawn_points']:
+                        if "bounds" in self.config and not point_in_poly(sp["latitude"], sp["longitude"], self.config["bounds"]):
+                            continue
                         self.pois["spawn_points"].add((sp["latitude"],sp["longitude"]))
                 if 'nearby_pokemons' in map_cell:
                     pass#print("nearby_pokemons", map_cell['nearby_pokemons'])
@@ -553,8 +556,9 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         map = Map()
         map._player = [lat, lng]
-        for bound in self.config["bounds"]:
-            map.add_bound(bound)
+        if "bounds" in self.config:
+            for bound in self.config["bounds"]:
+                map.add_bound(bound)
         for coord in self.coords:
             map.add_position((coord['latitude'], coord['longitude']))
         for catch in self.catches:

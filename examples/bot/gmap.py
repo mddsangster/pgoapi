@@ -15,13 +15,15 @@ class Map(object):
         centerLon = sum((x[1] for x in self._positions)) / len(self._positions)
         pathCode = """
             var boundsCoords = [{bounds}];
-            var bounds = new google.maps.Polyline({{
-                path: boundsCoords,
-                geodesic: true,
-                strokeColor: '#FF0000',
-                strokeOpacity: 0.5,
-                strokeWeight: 8}});
-            bounds.setMap(map);
+            if (boundsCoords.length > 0) {{
+                var bounds = new google.maps.Polyline({{
+                    path: boundsCoords,
+                    geodesic: true,
+                    strokeColor: '#FF0000',
+                    strokeOpacity: 0.5,
+                    strokeWeight: 8}});
+                bounds.setMap(map);
+            }}
             var walkPathCoords = [{path}];
             var walkPath = new google.maps.Polyline({{
                 path: walkPathCoords,
@@ -33,11 +35,13 @@ class Map(object):
         """.format(bounds=",".join(["new google.maps.LatLng(%f,%f)" % (p[0], p[1]) for p in self._bounds]),
                    path=",".join(["new google.maps.LatLng(%f,%f)" % (p[0], p[1]) for p in self._positions]))
         markersCode = "\n".join(
-            ["""var marker = new google.maps.Marker({{
-                position: {{lat: {lat}, lng: {lng}}},
+            ["""var pos = new google.maps.LatLng({lat},{lng});
+                var marker = new google.maps.Marker({{
+                position: pos,
                 map: map
                 }});
-                marker.setIcon('{icon}');""".format(lat=x[0][0], lng=x[0][1], icon=x[1]) for x in self._points
+                marker.setIcon('{icon}');
+                bounds.extend(pos);""".format(lat=x[0][0], lng=x[0][1], icon=x[1]) for x in self._points
             ])
         playerCode = """var marker = new google.maps.Marker({{
                         position: {{lat: {lat}, lng: {lng}}},
@@ -54,13 +58,15 @@ class Map(object):
                         zoom: 16,
                         center: new google.maps.LatLng({centerLat}, {centerLon})
                     }});
+                    var bounds = new google.maps.LatLngBounds();
                     {pathCode}
                     {markersCode}
                     {playerCode}
-                    var bounds = new google.maps.LatLngBounds();
-                    var arrayLength = boundsCoords.length;
-                    for (var i = 0; i < arrayLength; i++) {{
-                        bounds.extend(boundsCoords[i]);
+                    if (boundsCoords.length > 0) {{
+                        var arrayLength = boundsCoords.length;
+                        for (var i = 0; i < arrayLength; i++) {{
+                            bounds.extend(boundsCoords[i]);
+                        }}
                     }}
                     map.fitBounds(bounds);
                 }}
