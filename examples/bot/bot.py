@@ -135,10 +135,10 @@ class PoGoBot(object):
             "items": {},
             "candies": {},
             "pokemon": {},
-            "eggs": [],
+            "eggs": {},
             "stats": {},
             "applied": [],
-            "incubators": []
+            "incubators": {}
         }
 
     def process_inventory(self, inventory):
@@ -157,7 +157,7 @@ class PoGoBot(object):
                     ni["candies"][str(item["candy"]["family_id"])] = item["candy"]["candy"]
             elif "pokemon_data" in item:
                 if "is_egg" in item["pokemon_data"] and item["pokemon_data"]["is_egg"]:
-                    ni["eggs"].append(item["pokemon_data"])
+                    ni["eggs"][item["pokemon_data"]["id"]] = item["pokemon_data"]
                 else:
                     mon += 1
                     fam = str(item["pokemon_data"]["pokemon_id"])
@@ -166,7 +166,7 @@ class PoGoBot(object):
                     ni["pokemon"][fam].append(item)
             elif "egg_incubators" in item:
                 for incubator in item["egg_incubators"]["egg_incubator"]:
-                    ni["incubators"].append(incubator)
+                    ni["incubators"][incubator["id"]] = incubator
             elif "player_stats" in item:
                 ni["stats"] = item["player_stats"]
             elif "applied_items" in item:
@@ -209,12 +209,12 @@ class PoGoBot(object):
         sys.stdout.write("  Pokemon storage: %d/%d\n" % (sum([len(v) for k,v in self.inventory["pokemon"].iteritems()]) + len(self.inventory["eggs"]), self.player["max_pokemon_storage"]))
         sys.stdout.write("  Egg storage: %d/%d\n" % (len(self.inventory["eggs"]), 9))
         first = True
-        for ib in self.inventory["incubators"]:
+        for _,ib in self.inventory["incubators"].iteritems():
             if 'pokemon_id' in ib:
                 if first:
                     sys.stdout.write("  Loaded incubators:\n")
                     first = False
-                sys.stdout.write("    Remaining km: %f\n" % (ib["target_km_walked"]-self.inventory["stats"]["km_walked"]))
+                sys.stdout.write("    Remaining km: %.2f\n" % (ib["target_km_walked"]-self.inventory["stats"]["km_walked"]))
         sys.stdout.write("  Item storage: %d/%d\n" % (sum(self.inventory["items"].values()), self.player["max_item_storage"]))
         first = True
         for i in self.inventory["items"]:
@@ -377,9 +377,9 @@ class PoGoBot(object):
         sys.stdout.write("Spinning pokestops...\n")
         lat, lng, alt = self.api.get_position()
         path_resets = 0
-        for _, pokestop in self.pois["pokestops"].iteritems():
+        for pid, pokestop in self.pois["pokestops"].iteritems():
             if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004493:
-                if not "cooldown_complete_timestamp_ms" in pokestop:
+                if not pid in self.visited and not "cooldown_complete_timestamp_ms" in pokestop:
                     s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                     time.sleep(delay)
                     if s == -1:
@@ -599,20 +599,28 @@ class PoGoBot(object):
 
     def load_incubators(self):
         sys.stdout.write("Loading incubators...\n")
-        for ib in self.inventory["incubators"]:
+        print(len(self.inventory["incubators"]))
+        for _,ib in self.inventory["incubators"].iteritems():
+            print(ib)
             if not 'pokemon_id' in ib:
                 if len(self.inventory["eggs"]) > 0:
-                    bestegg = 0
-                    bestegg_idx = -1
-                    for i in xrange(len(self.inventory["eggs"])):
-                        if self.inventory["eggs"][i]["egg_km_walked_target"] > bestegg:
-                            bestegg = self.inventory["eggs"][i]["egg_km_walked_target"]
-                            bestegg_idx = i
-                    if bestegg_idx >= 0:
-                        egg = self.inventory["eggs"].pop(bestegg_idx)
-                        ret = self.api.use_item_egg_incubator(item_id=ib['id'], pokemon_id=egg['id'])
-                        if ret and "USE_ITEM_EGG_INCUBATOR" in ret['responses'] and ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
-                            sys.stdout.write("  A %fkm egg was loaded.\n" % bestegg)
+                    bestegg = (None, 0)
+                    for eid, egg in self.inventory["eggs"].iteritems():
+                        if egg["egg_km_walked_target"] > bestegg[1]:
+                            good = True
+                            for _,ib2 in self.inventory["incubators"].iteritems():
+                                if "pokemon_id" in ib2 and eid == ib2["pokemon_id"]:
+                                    good = False
+                                    break
+                            if good:
+                                bestegg = (egg, egg["egg_km_walked_target"])
+                    ret = self.api.use_item_egg_incubator(item_id=ib['id'], pokemon_id=bestegg[0]['id'])
+                    if ret["responses"]['USE_ITEM_EGG_INCUBATOR']["result"] == 1:
+                        sys.stdout.write("  A %fkm egg was loaded.\n" % bestegg[1])
+                        del self.inventory["eggs"][eid]
+                    else:
+                        print(ret)
+
 
     def calc_pq(self, pokemon):
         pq = 0
