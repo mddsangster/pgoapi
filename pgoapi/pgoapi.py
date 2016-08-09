@@ -29,6 +29,7 @@ import re
 import six
 import logging
 import requests
+import time
 
 from . import __title__, __version__, __copyright__
 from pgoapi.rpc_api import RpcApi
@@ -249,6 +250,8 @@ class PGoApiRequest:
             except UnexpectedResponseException as e:
                 self.log.error('Unexpected server response!')
                 raise
+
+            time.sleep(1)
 
         # cleanup after call execution
         self.log.info('Cleanup of request!')
