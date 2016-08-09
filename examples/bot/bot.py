@@ -599,9 +599,7 @@ class PoGoBot(object):
 
     def load_incubators(self):
         sys.stdout.write("Loading incubators...\n")
-        print(len(self.inventory["incubators"]))
         for _,ib in self.inventory["incubators"].iteritems():
-            print(ib)
             if not 'pokemon_id' in ib:
                 if len(self.inventory["eggs"]) > 0:
                     bestegg = (None, 0)
