@@ -63,9 +63,10 @@ if __name__ == '__main__':
         print("shit")
         sys.exit(1)
 
-    config["location"] = get_pos_by_name(config["location"])
-    if not config["location"]:
-        sys.exit(2)
+    if type(config["location"]) == str:
+        config["location"] = get_pos_by_name(config["location"])
+        if not config["location"]:
+            sys.exit(2)
 
     bot = PoGoBot(config)
     bot.run()

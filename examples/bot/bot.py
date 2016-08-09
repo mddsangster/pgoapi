@@ -190,10 +190,14 @@ class PoGoBot(object):
             self.process_inventory(ret["responses"]["GET_INVENTORY"])
         if hatched:
             pokemon, stardust, candy, xp = hatched
-            sys.stdout.write("  Hatched %d eggs:...\n")
+            sys.stdout.write("  Hatched %d eggs:...\n" % len(pokemon))
             sys.stdout.write("    Pokemon:\n")
             for p in pokemon:
-                sys.stdout.write("      %s\n" % p)
+                for _,fam in self.inventory["pokemon"].iteritems():
+                    for _,pp in fam.iteritems():
+                        print(pp)
+                        if pp["id"] == p:
+                            sys.stdout.write("      %s\n" % p)
             sys.stdout.write("    Experience: %d\n" % sum(xp))
             sys.stdout.write("    Stardust: %d\n" % sum(stardust))
             sys.stdout.write("    Candy: %d\n" % sum(candy))
@@ -381,7 +385,7 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         path_resets = 0
         for pid, pokestop in self.pois["pokestops"].iteritems():
-            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004492:
+            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004491:
                 if not pid in self.visited and not "cooldown_complete_timestamp_ms" in pokestop:
                     s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                     time.sleep(delay)
@@ -596,8 +600,7 @@ class PoGoBot(object):
 
     def save_config(self):
         sys.stdout.write("Saving config...\n")
-        lat, lng, alt = self.api.get_position()
-        self.config["location"] = "%f,%f" % (lat, lng)
+        self.config["location"] = self.api.get_position()
         with open("config.json", "w") as out:
             json.dump(self.config, out, indent=2, sort_keys=True)
 

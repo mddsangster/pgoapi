@@ -16,13 +16,17 @@ class Map(object):
         pathCode = """
             var boundsCoords = [{bounds}];
             if (boundsCoords.length > 0) {{
-                var bounds = new google.maps.Polyline({{
+                var border = new google.maps.Polyline({{
                     path: boundsCoords,
                     geodesic: true,
                     strokeColor: '#FF0000',
                     strokeOpacity: 0.5,
                     strokeWeight: 8}});
-                bounds.setMap(map);
+                border.setMap(map);
+                var arrayLength = boundsCoords.length;
+                for (var i = 0; i < arrayLength; i++) {{
+                    bnds.extend(boundsCoords[i]);
+                }}
             }}
             var walkPathCoords = [{path}];
             var walkPath = new google.maps.Polyline({{
@@ -41,7 +45,7 @@ class Map(object):
                 map: map
                 }});
                 marker.setIcon('{icon}');
-                bounds.extend(pos);""".format(lat=x[0][0], lng=x[0][1], icon=x[1]) for x in self._points
+                bnds.extend(pos);""".format(lat=x[0][0], lng=x[0][1], icon=x[1]) for x in self._points
             ])
         playerCode = """var marker = new google.maps.Marker({{
                         position: {{lat: {lat}, lng: {lng}}},
@@ -58,17 +62,11 @@ class Map(object):
                         zoom: 16,
                         center: new google.maps.LatLng({centerLat}, {centerLon})
                     }});
-                    var bounds = new google.maps.LatLngBounds();
+                    var bnds = new google.maps.LatLngBounds();
                     {pathCode}
                     {markersCode}
                     {playerCode}
-                    if (boundsCoords.length > 0) {{
-                        var arrayLength = boundsCoords.length;
-                        for (var i = 0; i < arrayLength; i++) {{
-                            bounds.extend(boundsCoords[i]);
-                        }}
-                    }}
-                    map.fitBounds(bounds);
+                    map.fitBounds(bnds);
                 }}
                 google.maps.event.addDomListener(window, 'load', show_map);
             </script>
