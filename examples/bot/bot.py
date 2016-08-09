@@ -724,6 +724,8 @@ class PoGoBot(object):
     def play(self):
         delay = 1
         last_map = 0
+        self.api.get_player()
+        time.sleep(delay)
         while True:
             self.save_config()
             hatched = self.get_hatched_eggs(delay)
