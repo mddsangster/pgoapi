@@ -96,6 +96,7 @@ class PoGoBot(object):
         self.path = []
         self.visited = {}
         self.inventory = self.empty_inventory()
+        self.scan_stats = {}
 
         self.last_move_time = time.time()
         self.change_dir_time = self.last_move_time + random.uniform(60,300)
@@ -263,15 +264,15 @@ class PoGoBot(object):
         time.sleep(delay)
 
     EARTH_RADIUS = 6371 * 1000
-    def get_cell_ids(self, lat, long, radius=1000):
+    def get_cell_ids(self, lat, long, radius=1000, level=15):
         # Max values allowed by server according to this comment:
         # https://github.com/AeonLucid/POGOProtos/issues/83#issuecomment-235612285
         if radius > 1500:
             radius = 1500  # radius = 1500 is max allowed by the server
         region = Cap.from_axis_angle(LatLng.from_degrees(lat, long).to_point(), Angle.from_degrees(360*radius/(2*math.pi*self.EARTH_RADIUS)))
         coverer = RegionCoverer()
-        coverer.min_level = 15
-        coverer.max_level = 15
+        coverer.min_level = level
+        coverer.max_level = level
         cells = coverer.get_covering(region)
         cells = cells[:100]  # len(cells) = 100 is max allowed by the server
         return sorted([x.id() for x in cells])
@@ -279,6 +280,10 @@ class PoGoBot(object):
     def get_pois(self, delay):
         sys.stdout.write("Getting POIs...\n")
         lat, lng, alt = self.api.get_position()
+        level = random.randint(12,18)
+        if not level in self.scan_stats:
+            self.scan_stats[level] = {"wild_pokemons": 0}
+        sys.stdout.write("  Scanning level %d...\n" % level)
         cell_ids = self.get_cell_ids(lat, lng)
         timestamps = [0,] * len(cell_ids)
         ret = self.api.get_map_objects(latitude=lat, longitude=lng, since_timestamp_ms=timestamps, cell_id=cell_ids)
@@ -289,6 +294,7 @@ class PoGoBot(object):
         if ret and ret["responses"] and "GET_MAP_OBJECTS" in ret["responses"] and ret["responses"]["GET_MAP_OBJECTS"]["status"] == 1:
             for map_cell in ret["responses"]["GET_MAP_OBJECTS"]["map_cells"]:
                 if "wild_pokemons" in map_cell:
+                    self.scan_stats[level]["wild_pokemons"] += 1
                     for pokemon in map_cell["wild_pokemons"]:
                         pid = get_key_from_pokemon(pokemon)
                         if not pid in self.pois["pokemon"]:
@@ -314,11 +320,15 @@ class PoGoBot(object):
                 if 'catchable_pokemons' in map_cell:
                     pass#print('catchable_pokemons', map_cell['catchable_pokemons'])
         if newpokemon > 0:
-            sys.stdout.write("  Found %d new pokemon.\n" % newpokemon)
+            sys.stdout.write("    Found %d new pokemon.\n" % newpokemon)
         if newpokestops > 0:
-            sys.stdout.write("  Found %d new pokestops.\n" % newpokestops)
+            sys.stdout.write("    Found %d new pokestops.\n" % newpokestops)
         if newgyms > 0:
-            sys.stdout.write("  Found %d new gyms.\n" % newgyms)
+            sys.stdout.write("    Found %d new gyms.\n" % newgyms)
+        if len(self.scan_stats.keys()) > 0:
+            sys.stdout.write("  Scan stats by level:\n")
+            for level, stat in self.scan_stats.iteritems():
+                sys.stdout.write('    %s {"wild_pokemons": %d}\n' % (level, stat["wild_pokemons"]))
         time.sleep(delay)
 
     def prune_expired_pokemon(self):
