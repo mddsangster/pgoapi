@@ -378,7 +378,7 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         path_resets = 0
         for pid, pokestop in self.pois["pokestops"].iteritems():
-            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004493:
+            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004492:
                 if not pid in self.visited and not "cooldown_complete_timestamp_ms" in pokestop:
                     s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                     time.sleep(delay)
