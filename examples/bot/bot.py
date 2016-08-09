@@ -194,7 +194,7 @@ class PoGoBot(object):
             sys.stdout.write("    Pokemon:\n")
             for p in pokemon:
                 for _,fam in self.inventory["pokemon"].iteritems():
-                    for _,pp in fam.iteritems():
+                    for pp in fam:
                         print(pp)
                         if pp["id"] == p:
                             sys.stdout.write("      %s\n" % p)
@@ -284,7 +284,7 @@ class PoGoBot(object):
     def get_pois(self, delay):
         sys.stdout.write("Getting POIs...\n")
         lat, lng, alt = self.api.get_position()
-        level = random.randint(15,18)
+        level = random.randint(12,17)
         if not level in self.scan_stats:
             self.scan_stats[level] = {"wild_pokemons": 0}
         sys.stdout.write("  Scanning level %d...\n" % level)
@@ -412,15 +412,23 @@ class PoGoBot(object):
         pcap = pokemon["capture_probability"]["capture_probability"][0]
         sys.stdout.write("  Encountered a %s %s...\n" % (kind, self.pokemon_id_to_name(pid)))
         sys.stdout.write("    Pokeball capture probability is %.2f...\n" % pcap)
-        # if pcap < .2 and "701" in self.inventory["items"]:
-        #     sys.stdout.write("      Using a %s..." % self.item_names["701"])
-        #     ret = self.api.item_use(item_id=701)
-        #     if ret["responses"]["USE_ITEM_XP_BOOST"]["result"] == 1:
-        #         sys.stdout.write("success.\n")
-        #     else:
-        #         sys.stdout.write("failed.\n")
-        #     time.sleep(delay)
+        if pcap < .2 and "701" in self.inventory["items"]:
+            sys.stdout.write("      Using a %s..." % self.item_names["701"])
+            ret = self.api.use_item_capture(item_id=701, encounter_id=eid, spawn_point_id=spid)
+            if "item_capture_mult" in ret["responses"]["USE_ITEM_CAPTURE"]:
+                sys.stdout.write("success.\n")
+                sys.stdout.write("        Capture multiplier %.2f...\n" % ret["responses"]["USE_ITEM_CAPTURE"]["item_capture_mult"])
+                pcap = pcap * ret["responses"]["USE_ITEM_CAPTURE"]["item_capture_mult"]
+                sys.stdout.write("        New capture probability is %.2f...\n" % pcap)
+            else:
+                sys.stdout.write("failed.\n")
+                print(ret)
+            time.sleep(delay)
         minball = 1
+        if pcap < .3:
+            minball = 2
+        elif pcap < .15:
+            minball = 3
         while True:
             normalized_reticle_size = 1.950 - random.uniform(0, .15)
             normalized_hit_position = 1.0
