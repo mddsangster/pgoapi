@@ -90,13 +90,13 @@ def init_config():
     config_file = "config.json"
 
     # If config file exists, load variables from json
-    load   = {}
+    config = {}
     if os.path.isfile(config_file):
         with open(config_file) as data:
-            load.update(json.load(data))
+            config.update(json.load(data))
 
     # Read passed in Arguments
-    required = lambda x: not x in load
+    required = lambda x: not x in config
     parser.add_argument("-a", "--auth_service", help="Auth Service ('ptc' or 'google')",
         required=required("auth_service"))
     parser.add_argument("-u", "--username", help="Username", required=required("username"))
@@ -105,18 +105,14 @@ def init_config():
     parser.add_argument("-d", "--debug", help="Debug Mode", action='store_true')
     parser.add_argument("-t", "--test", help="Only parse the specified location", action='store_true')
     parser.set_defaults(DEBUG=False, TEST=False)
-    config = parser.parse_args()
+    args = parser.parse_args()
 
     # Passed in arguments shoud trump
-    for key in config.__dict__:
-        if key in load and config.__dict__[key] == None:
-            config.__dict__[key] = str(load[key])
+    for key in args.__dict__:
+        if args.__dict__[key] != None:
+            config[key] = args.__dict__[key]
 
-    if config.__dict__["password"] is None:
-        log.info("Secure Password Input (if there is no password prompt, use --password <pw>):")
-        config.__dict__["password"] = getpass.getpass()
-
-    if config.auth_service not in ['ptc', 'google']:
+    if config["auth_service"] not in ['ptc', 'google']:
       log.error("Invalid Auth service specified! ('ptc' or 'google')")
       return None
 
@@ -138,17 +134,17 @@ def main():
     if not config:
         return
 
-    if config.debug:
+    if config["debug"]:
         logging.getLogger("requests").setLevel(logging.DEBUG)
         logging.getLogger("pgoapi").setLevel(logging.DEBUG)
         logging.getLogger("rpc_api").setLevel(logging.DEBUG)
 
-    position = get_pos_by_name(config.location)
-    if not position:
-        return
-
-    if config.test:
-        return
+    if type(config["location"]) == str:
+        position = get_pos_by_name(config["location"])
+        if not position:
+            return
+    else:
+        position = config["location"]
 
     # instantiate pgoapi
     api = pgoapi.PGoApi()
@@ -156,8 +152,9 @@ def main():
     # provide player position on the earth
     api.set_position(*position)
 
-    if not api.login(config.auth_service, config.username, config.password):
-        return
+    api.set_authentication(provider=config["auth_service"],
+                           username=config["username"],
+                           password=config["password"])
 
     # get inventory call
     # ----------------------
