@@ -92,8 +92,7 @@ class PoGoBot(object):
         self.coords = [{'latitude': self.config["location"][0], 'longitude': self.config["location"][1]}]
         self.catches = []
         self.spins = []
-        self.pois = {"pokestops": {}, "gyms": {}, "pokemon": {}}
-        self.spawnpoints = {}
+        self.pois = {"pokestops": {}, "gyms": {}, "pokemon": {}, "spawn_points": set()}
         self.path = []
         self.visited = {}
         self.inventory = self.empty_inventory()
@@ -282,11 +281,11 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         cell_ids = self.get_cell_ids(lat, lng)
         timestamps = [0,] * len(cell_ids)
-
         ret = self.api.get_map_objects(latitude=lat, longitude=lng, since_timestamp_ms=timestamps, cell_id=cell_ids)
         newpokemon = 0
         newpokestops = 0
         newgyms = 0
+        newsp = 0
         if ret and ret["responses"] and "GET_MAP_OBJECTS" in ret["responses"] and ret["responses"]["GET_MAP_OBJECTS"]["status"] == 1:
             for map_cell in ret["responses"]["GET_MAP_OBJECTS"]["map_cells"]:
                 if "wild_pokemons" in map_cell:
@@ -307,6 +306,13 @@ class PoGoBot(object):
                                 if not fort["id"] in self.pois['gyms']:
                                     newgyms += 1
                                 self.pois['gyms'][fort["id"]] = fort
+                if 'spawn_points' in map_cell:
+                    for sp in map_cell['spawn_points']:
+                        self.pois["spawn_points"].add((sp["latitude"],sp["longitude"]))
+                if 'nearby_pokemons' in map_cell:
+                    pass#print("nearby_pokemons", map_cell['nearby_pokemons'])
+                if 'catchable_pokemons' in map_cell:
+                    pass#print('catchable_pokemons', map_cell['catchable_pokemons'])
         if newpokemon > 0:
             sys.stdout.write("  Found %d new pokemon.\n" % newpokemon)
         if newpokestops > 0:
@@ -320,8 +326,6 @@ class PoGoBot(object):
         expired = []
         for k, pokemon in self.pois["pokemon"].iteritems():
             if pokemon['time_till_hidden_ms'] <= time.time():
-                if not k in self.spawnpoints:
-                    self.spawnpoints[k] = self.pois["pokemon"][k]
                 expired.append(k)
         if len(expired) > 0:
             for k in expired:
@@ -335,7 +339,8 @@ class PoGoBot(object):
             self.spins.append(pokestop)
             self.visited[pokestop["id"]] = time.time()
             if pokestop["id"] in self.path:
-                self.path.remove(pokestop["id"])
+                self.path = []
+                #self.path.remove(pokestop["id"])
             sys.stdout.write("  Spun pokestop and got:\n")
             xp = ret["responses"]["FORT_SEARCH"]["experience_awarded"]
             sys.stdout.write("    Experience: %d\n" % xp)
@@ -363,7 +368,7 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         path_resets = 0
         for _, pokestop in self.pois["pokestops"].iteritems():
-            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004494:
+            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004493:
                 if not "cooldown_complete_timestamp_ms" in pokestop:
                     s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                     time.sleep(delay)
@@ -525,7 +530,7 @@ class PoGoBot(object):
                 lng = target["longitude"]
                 sys.stdout.write("    Visited a pokestop...\n")
                 self.visited[self.path[0]] = time.time()
-                self.path.pop(0)
+                self.path = []
             else:
                 lat = lat + pymath.sin(pymath.radians(self.angle)) * r
                 lng = lng + pymath.cos(pymath.radians(self.angle)) * r
@@ -553,13 +558,15 @@ class PoGoBot(object):
             map.add_point((lat, lng), "http://pokeapi.co/media/sprites/pokemon/%d.png" % pid)
         for spin in self.spins:
             map.add_point((spin['latitude'], spin['longitude']), "http://maps.google.com/mapfiles/ms/icons/blue.png")
+        for sp in self.pois["spawn_points"]:
+            map.add_point(sp, "http://www.srh.noaa.gov/images/tsa/timeline/gray-circle.png")
         for _, pokestop in self.pois["pokestops"].iteritems():
             if pokestop["id"] in self.visited:
                 map.add_point((pokestop['latitude'], pokestop['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/red-circle.png")
             elif pokestop["id"] in self.path:
                 map.add_point((pokestop['latitude'], pokestop['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/green-circle.png")
             else:
-                map.add_point((pokestop['latitude'], pokestop['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/gray-circle.png")
+                map.add_point((pokestop['latitude'], pokestop['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/orange-circle.png")
         for _, gym in self.pois["gyms"].iteritems():
             map.add_point((gym['latitude'], gym['longitude']), "http://www.srh.noaa.gov/images/tsa/timeline/blue-circle.png")
         # for _, pokemon in self.pois["pokemon"].iteritems():
@@ -705,8 +712,8 @@ class PoGoBot(object):
         time.sleep(delay)
 
     def play(self):
-        delay = 5
-        i = 0
+        delay = 1
+        last_map = 0
         while True:
             self.save_config()
             hatched = self.get_hatched_eggs(delay)
@@ -721,8 +728,9 @@ class PoGoBot(object):
                     self.last_move_time = time.time()
                     continue
             self.kill_time(delay)
-            if i % 3 == 0:
+            if last_map + 30 < time.time():
                 self.get_pois(delay)
+                last_map = time.time()
             self.prune_expired_pokemon()
             self.kill_time(delay)
             if not self.config["nospin"]:
@@ -735,7 +743,6 @@ class PoGoBot(object):
             self.update_path()
             self.save_map()
             self.move(self.config["speed"])
-            i += 1
 
     def run(self):
         self.play()
