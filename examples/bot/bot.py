@@ -193,11 +193,15 @@ class PoGoBot(object):
             sys.stdout.write("  Hatched %d eggs:...\n" % len(pokemon))
             sys.stdout.write("    Pokemon:\n")
             for p in pokemon:
+                found = False
                 for _,fam in self.inventory["pokemon"].iteritems():
                     for pp in fam:
-                        print(pp)
-                        if pp["id"] == p:
+                        if pp["pokemon_data"]["id"] == p:
                             sys.stdout.write("      %s\n" % p)
+                            found = True
+                            break
+                    if found:
+                        break
             sys.stdout.write("    Experience: %d\n" % sum(xp))
             sys.stdout.write("    Stardust: %d\n" % sum(stardust))
             sys.stdout.write("    Candy: %d\n" % sum(candy))
