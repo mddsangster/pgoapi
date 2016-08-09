@@ -264,7 +264,7 @@ class PoGoBot(object):
         time.sleep(delay)
 
     EARTH_RADIUS = 6371 * 1000
-    def get_cell_ids(self, lat, long, radius=1000, level=15):
+    def get_cell_ids(self, lat, long, radius=500, level=15):
         # Max values allowed by server according to this comment:
         # https://github.com/AeonLucid/POGOProtos/issues/83#issuecomment-235612285
         if radius > 1500:
