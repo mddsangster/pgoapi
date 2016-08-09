@@ -72,7 +72,7 @@ class PoGoBot(object):
         self.api.set_authentication(provider=self.config["auth_service"],
                                     username=self.config["username"],
                                     password=self.config["password"])
-        self.api.activate_signature("encrypt.dll")
+        self.api.activate_signature(os.path.expanduser(self.config["encrypt"]))
         self.angle = random.uniform(0,360)
 
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/pokemon.json"), "r") as infile:
