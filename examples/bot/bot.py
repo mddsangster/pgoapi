@@ -288,11 +288,11 @@ class PoGoBot(object):
     def get_pois(self, delay):
         sys.stdout.write("Getting POIs...\n")
         lat, lng, alt = self.api.get_position()
-        level = random.randint(12,17)
+        level = random.randint(15,17)
         if not level in self.scan_stats:
             self.scan_stats[level] = {"wild_pokemons": 0}
         sys.stdout.write("  Scanning level %d...\n" % level)
-        cell_ids = self.get_cell_ids(lat, lng, radius=self.config["radius"])
+        cell_ids = self.get_cell_ids(lat, lng, level=level, radius=self.config["radius"])
         timestamps = [0,] * len(cell_ids)
         ret = self.api.get_map_objects(latitude=lat, longitude=lng, since_timestamp_ms=timestamps, cell_id=cell_ids)
         newpokemon = 0
@@ -388,7 +388,7 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         path_resets = 0
         for pid, pokestop in self.pois["pokestops"].iteritems():
-            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004491:
+            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004490:
                 if not pid in self.visited and not "cooldown_complete_timestamp_ms" in pokestop:
                     s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                     time.sleep(delay)
@@ -415,7 +415,7 @@ class PoGoBot(object):
         pcap = pokemon["capture_probability"]["capture_probability"][0]
         sys.stdout.write("  Encountered a %s %s...\n" % (kind, self.pokemon_id_to_name(pid)))
         sys.stdout.write("    Pokeball capture probability is %.2f...\n" % pcap)
-        if pcap < .2 and "701" in self.inventory["items"]:
+        if pcap < .25 and "701" in self.inventory["items"]:
             sys.stdout.write("      Using a %s..." % self.item_names["701"])
             ret = self.api.use_item_capture(item_id=701, encounter_id=eid, spawn_point_id=spid)
             if "item_capture_mult" in ret["responses"]["USE_ITEM_CAPTURE"]:
