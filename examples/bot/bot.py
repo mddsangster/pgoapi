@@ -418,7 +418,6 @@ class PoGoBot(object):
             del self.pois["pokemon"][upid]
 
     def catch_pokemon(self, pokemon, kind, balls, delay, upid=None):
-        ret = True
         minball = 1
         eid = pokemon["encounter_id"]
         spid = pokemon["spawn_point_id"]
@@ -442,6 +441,7 @@ class PoGoBot(object):
                 minball = 2
             elif pcap < .15:
                 minball = 3
+        clean = None
         while True:
             normalized_reticle_size = 1.950 - random.uniform(0, .15)
             normalized_hit_position = 1.0
@@ -456,9 +456,8 @@ class PoGoBot(object):
             ret = self.api.catch_pokemon(encounter_id=eid, spawn_point_id=spid, pokeball=ball, normalized_reticle_size = normalized_reticle_size, hit_pokemon=True, spin_modifier=spin_modifier, normalized_hit_position=normalized_hit_position)
             if ret["responses"]["CATCH_POKEMON"]["status"] == 1:
                 sys.stdout.write("success.\n")
+                clean = (kind, upid)
                 self.catches.append((kind,pokemon))
-                if upid:
-                    self.clean_encounter(kind, upid)
                 sys.stdout.write("      Experience: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["xp"]))
                 sys.stdout.write("      Stardust: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["stardust"]))
                 sys.stdout.write("      Candies: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["candy"]))
@@ -475,17 +474,18 @@ class PoGoBot(object):
                 time.sleep(delay)
             elif ret["responses"]["CATCH_POKEMON"]["status"] == 3:
                 sys.stdout.write("flee.\n")
-                if upid:
-                    self.clean_encounter(kind, upid)
+                clean = (kind, upid)
                 break
             elif ret["responses"]["CATCH_POKEMON"]["status"] == 4:
                 sys.stdout.write("missed.\n")
                 time.sleep(delay)
         time.sleep(delay)
+        return clean
 
     def catch_wild_pokemon(self, delay):
         sys.stdout.write("Looking for wild pokemon encounters...\n")
         lat, lng, alt = self.api.get_position()
+        clean = []
         for pid, pokemon in self.pois["pokemon"].iteritems():
             ret = self.api.encounter(encounter_id=pokemon['encounter_id'],
                                      spawn_point_id=pokemon['spawn_point_id'],
@@ -495,14 +495,16 @@ class PoGoBot(object):
             if ret["responses"]["ENCOUNTER"]["status"] == 1:
                 pokemon = ret["responses"]["ENCOUNTER"]["wild_pokemon"]
                 sys.stdout.write("  Encountered a wild %s...\n" % self.pokemon_id_to_name(pokemon["pokemon_data"]["pokemon_id"]))
-                if not self.catch_pokemon(pokemon, "wild", self.balls, delay, pid):
-                    break
+                clean.append(self.catch_pokemon(pokemon, "wild", self.balls, delay, pid))
             else:
                 print(ret)
+        for c in clean:
+            if c: self.clean_encounter(*c)
 
 
     def catch_lure_pokemon(self, delay):
         sys.stdout.write("Lookng for lure pokemon encounters...\n")
+        clean = []
         for fid, fort in self.pois["pokestops"].iteritems():
             if "lure_info" in fort:
                 lat, lng, alt = self.api.get_position()
@@ -525,12 +527,13 @@ class PoGoBot(object):
                     pokemon["latitude"] = fort["latitude"]
                     pokemon["longitude"] = fort["longitude"]
                     sys.stdout.write("  Encountered a lured %s...\n" % self.pokemon_id_to_name(pokemon["pokemon_data"]["pokemon_id"]))
-                    if not self.catch_pokemon(pokemon, "lure", self.balls, delay, pid):
-                        break
-                if ret["responses"]["DISK_ENCOUNTER"]["result"] == 2:
+                    clean.append(self.catch_pokemon(pokemon, "lure", self.balls, delay, pid))
+                elif ret["responses"]["DISK_ENCOUNTER"]["result"] == 2:
                     self.lure_encounters[pid] = pokemon
                 else:
                     print(ret)
+        for c in clean:
+            if c: self.clean_encounter(*c)
 
     def catch_incense_pokemon(self, delay):
         sys.stdout.write("Lookng for incense encounters...\n")
@@ -538,21 +541,23 @@ class PoGoBot(object):
         ret = self.api.get_incense_pokemon(player_latitude=lat,
                                            player_longitude=lng)
         time.sleep(delay)
+        clean = []
         if ret["responses"]["GET_INCENSE_POKEMON"]["result"] == 1:
             pokemon = ret["responses"]["GET_INCENSE_POKEMON"]
             pokemon['spawn_point_id'] = pokemon["encounter_location"]
             pokemon['pokemon_data'] = {"pokemon_id": pokemon["pokemon_id"]}
+            self.incense_encounters[get_key_from_pokemon(pokemon)] = pokemon
+        for pid, pokemon in self.incense_encounters.iteritems():
             ret = self.api.incense_encounter(encounter_id=pokemon["encounter_id"],
                                              encounter_location=pokemon["spawn_point_id"])
             time.sleep(delay)
-            pid = get_key_from_pokemon(pokemon)
             if ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 1:
                 sys.stdout.write("  Encountered an incense %s...\n" % self.pokemon_id_to_name(pokemon["pokemon_id"]))
-                self.catch_pokemon(pokemon, "incense", self.balls, delay, pid)
-            elif ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 2:
-                self.incense_encounters[pid] = pokemon
+                clean.append(self.catch_pokemon(pokemon, "incense", self.balls, delay, pid))
             else:
                 print(ret)
+        for c in clean:
+            if c: self.clean_encounter(*c)
 
     def update_path(self):
         sys.stdout.write("Updating path...\n")
