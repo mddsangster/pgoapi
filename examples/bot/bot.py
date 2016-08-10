@@ -576,7 +576,7 @@ class PoGoBot(object):
                 if len(lures) > 0 and i > 0:
                     sys.stdout.write("    Prioritizing pokestop with lure...\n")
                 else:
-                    i = fids[tour[i]]
+                    i = np.random.poisson(self.config["noise"],1)[0]
                 self.target = fids[tour[i]]
         remove = []
         for k,v in self.visited.iteritems():
