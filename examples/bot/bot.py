@@ -99,6 +99,7 @@ class PoGoBot(object):
         self.scan_stats = {}
         self.cell_timestamps = {}
         self.incense_encounters = {}
+        self.lure_encounters = {}
 
         self.last_move_time = time.time()
         self.change_dir_time = self.last_move_time + random.uniform(60,300)
@@ -453,6 +454,8 @@ class PoGoBot(object):
                 if upid:
                     if kind == "incense" and upid in self.incense_encounters.keys():
                         del self.incense_encounters[upid]
+                    elif kind == "lure" and upid in self.lure_encounters.keys():
+                        del self.lure_encounters[upid]
                     elif kind == "wild" and upid in self.pois["pokemon"].keys():
                         del self.pois["pokemon"][upid]
                 sys.stdout.write("      Experience: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["xp"]))
@@ -507,6 +510,11 @@ class PoGoBot(object):
                                               player_latitude=lat,
                                               player_longitude=lng)
                 time.sleep(delay)
+                pokemon = {
+                    "spawn_point_id": fort["lure_info"]["fort_id"],
+                    "pokemon_data": {"pokemon_id": fort["lure_info"]["active_pokemon_id"]}
+                }
+                pid = get_key_from_pokemon(pokemon)
                 if ret["responses"]["DISK_ENCOUNTER"]["result"] == 1:
                     pokemon = ret["responses"]["DISK_ENCOUNTER"]
                     pokemon['encounter_id'] = fort["lure_info"]["encounter_id"]
@@ -514,8 +522,10 @@ class PoGoBot(object):
                     pokemon["latitude"] = fort["latitude"]
                     pokemon["longitude"] = fort["longitude"]
                     sys.stdout.write("  Encountered a lured %s...\n" % self.pokemon_id_to_name(pokemon["pokemon_data"]["pokemon_id"]))
-                    if not self.catch_pokemon(pokemon, "lure", self.balls, delay):
+                    if not self.catch_pokemon(pokemon, "lure", self.balls, delay, pid):
                         break
+                if ret["responses"]["DISK_ENCOUNTER"]["result"] == 2:
+                    self.disk_encounters[pid] = pokemon
                 else:
                     print(ret)
 
@@ -536,8 +546,10 @@ class PoGoBot(object):
             if ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 1:
                 sys.stdout.write("  Encountered an incense %s...\n" % self.pokemon_id_to_name(pokemon["pokemon_id"]))
                 self.catch_pokemon(pokemon, "incense", self.balls, delay, pid)
-            else:
+            elif ret["responses"]["INCENSE_ENCOUNTER"]["result"] == 2:
                 self.incense_encounters[pid] = pokemon
+            else:
+                print(ret)
 
     def update_path(self):
         sys.stdout.write("Updating path...\n")
@@ -583,6 +595,20 @@ class PoGoBot(object):
             sys.stdout.write("  Heading towards nearby incense pokemon...\n")
             nearest = (None, float("inf"))
             for pid, pokemon in self.incense_encounters.iteritems():
+                d = get_distance((pokemon['latitude'], pokemon['longitude']), (lat, lng))
+                if d < nearest[1]:
+                    nearest = (pokemon, d)
+            if nearest[1] < r:
+                lat = nearest[0]["latitude"]
+                lng = nearest[0]["longitude"]
+            else:
+                self.angle = get_angle((lat, lng), (nearest[0]["latitude"], nearest[0]["longitude"]))
+                lat = lat + pymath.sin(pymath.radians(self.angle)) * r
+                lng = lng + pymath.cos(pymath.radians(self.angle)) * r
+        elif len(self.lure_encounters.keys()) > 0:
+            sys.stdout.write("  Heading towards nearby lure pokemon...\n")
+            nearest = (None, float("inf"))
+            for pid, pokemon in self.lure_encounters.iteritems():
                 d = get_distance((pokemon['latitude'], pokemon['longitude']), (lat, lng))
                 if d < nearest[1]:
                     nearest = (pokemon, d)
