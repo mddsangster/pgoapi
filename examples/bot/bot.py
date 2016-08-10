@@ -578,7 +578,7 @@ class PoGoBot(object):
                 tour[:] = [t-1 for t in tour]
                 lures = []
                 for i in xrange(min(len(tour),5)):
-                    if 'active_fort_modifier' in self.pois["pokestops"][fids[tour[i]]]:
+                    if 'active_fort_modifier' in self.pois["pokestops"][fids[tour[i]]] and not fids[tour[i]] in self.visited:
                         lures.append(i)
                 if len(lures) > 0 and min(lures) > 0:
                     sys.stdout.write("    Prioritizing pokestop with lure...\n")
