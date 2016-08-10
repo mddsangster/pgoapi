@@ -772,6 +772,8 @@ class PoGoBot(object):
 
     def transfer_pokemon(self, delay):
         t = 0
+        if "cp" not in self.config:
+            self.config["cp"] = 10000
         if (sum([len(v) for k,v in self.inventory["pokemon"].iteritems()]) + len(self.inventory["eggs"])) > self.config["minpokemon"]:
             sys.stdout.write("Transfering pokemon...\n")
             transferable_pokemon = []
@@ -782,7 +784,7 @@ class PoGoBot(object):
                     if pid not in self.enabled_evolutions:
                         for pokemon in self.inventory["pokemon"][pid]:
                             pq = self.calc_pq(pokemon)
-                            if pq < self.config["powerquotient"]:
+                            if pq < self.config["powerquotient"] and (pokemon["pokemon_data"]["cp"] < self.config["cp"]):
                                 transferable_pokemon.append((pokemon, pq))
                     else:
                         isize = len(self.inventory["pokemon"][pid])
@@ -790,7 +792,7 @@ class PoGoBot(object):
                             count = isize - self.enabled_evolutions[pid]
                             for pokemon in self.inventory["pokemon"][pid]:
                                 pq = self.calc_pq(pokemon)
-                                if pq < self.config["powerquotient"]:
+                                if pq < self.config["powerquotient"] and (pokemon["pokemon_data"]["cp"] < self.config["cp"]):
                                     transferable_pokemon.append((pokemon, pq))
                                     count -= 1
                                 if count == 0:
@@ -798,12 +800,12 @@ class PoGoBot(object):
                 else:
                     for pokemon in self.inventory["pokemon"][pid]:
                         pq = self.calc_pq(pokemon)
-                        if pq < self.config["powerquotient"]:
+                        if pq < self.config["powerquotient"] and (pokemon["pokemon_data"]["cp"] < self.config["cp"]):
                             transferable_pokemon.append((pokemon, pq))
             for pokemon, pq in transferable_pokemon:
                 ret = self.api.release_pokemon(pokemon_id=pokemon["pokemon_data"]["id"])
                 if ret and "RELEASE_POKEMON" in ret['responses'] and ret["responses"]["RELEASE_POKEMON"]["result"] == 1:
-                    sys.stdout.write("  A %s with a power quotient of %d was released.\n" % (self.pokemon_id_to_name(pokemon["pokemon_data"]["pokemon_id"]), pq))
+                    sys.stdout.write("  A %s with a power quotient of %d and CP of %d was released.\n" % (self.pokemon_id_to_name(self.family_ids[str(pokemon["pokemon_data"]["pokemon_id"])]), pq, pokemon["pokemon_data"]["cp"]))
                     t += 1
                 time.sleep(delay)
         return t
