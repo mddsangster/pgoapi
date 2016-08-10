@@ -385,7 +385,6 @@ class PoGoBot(object):
                     sys.stdout.write("      %d x %s\n" % (ni[item], self.item_names[str(item)]))
             status = 1
         else:
-            print(ret)
             if ret["responses"]["FORT_SEARCH"]["result"] == 3:
                 print(pokestop)
             elif len(ret["responses"]["FORT_SEARCH"].keys()) == 1 and ret["responses"]["FORT_SEARCH"]["result"] == 1:
@@ -397,7 +396,7 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         path_resets = 0
         for pid, pokestop in self.pois["pokestops"].iteritems():
-            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004445:
+            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004435:
                 if not pid in self.visited and not "cooldown_complete_timestamp_ms" in pokestop:
                     s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                     time.sleep(delay)
@@ -410,6 +409,13 @@ class PoGoBot(object):
                             if s == 1:
                                 break
 
+    def clean_encounter(self, kind, upid):
+        if kind == "incense" and upid in self.incense_encounters.keys():
+            del self.incense_encounters[upid]
+        elif kind == "lure" and upid in self.lure_encounters.keys():
+            del self.lure_encounters[upid]
+        elif kind == "wild" and upid in self.pois["pokemon"].keys():
+            del self.pois["pokemon"][upid]
 
     def catch_pokemon(self, pokemon, kind, balls, delay, upid=None):
         ret = True
@@ -452,12 +458,7 @@ class PoGoBot(object):
                 sys.stdout.write("success.\n")
                 self.catches.append((kind,pokemon))
                 if upid:
-                    if kind == "incense" and upid in self.incense_encounters.keys():
-                        del self.incense_encounters[upid]
-                    elif kind == "lure" and upid in self.lure_encounters.keys():
-                        del self.lure_encounters[upid]
-                    elif kind == "wild" and upid in self.pois["pokemon"].keys():
-                        del self.pois["pokemon"][upid]
+                    self.clean_encounter(kind, upid)
                 sys.stdout.write("      Experience: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["xp"]))
                 sys.stdout.write("      Stardust: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["stardust"]))
                 sys.stdout.write("      Candies: %d\n" % sum(ret["responses"]["CATCH_POKEMON"]["capture_award"]["candy"]))
@@ -475,7 +476,7 @@ class PoGoBot(object):
             elif ret["responses"]["CATCH_POKEMON"]["status"] == 3:
                 sys.stdout.write("flee.\n")
                 if upid:
-                    del self.pois["pokemon"][upid]
+                    self.clean_encounter(kind, upid)
                 break
             elif ret["responses"]["CATCH_POKEMON"]["status"] == 4:
                 sys.stdout.write("missed.\n")
@@ -512,7 +513,9 @@ class PoGoBot(object):
                 time.sleep(delay)
                 pokemon = {
                     "spawn_point_id": fort["lure_info"]["fort_id"],
-                    "pokemon_data": {"pokemon_id": fort["lure_info"]["active_pokemon_id"]}
+                    "pokemon_data": {"pokemon_id": fort["lure_info"]["active_pokemon_id"]},
+                    "latitude": fort["latitude"],
+                    "longitude": fort["longitude"]
                 }
                 pid = get_key_from_pokemon(pokemon)
                 if ret["responses"]["DISK_ENCOUNTER"]["result"] == 1:
