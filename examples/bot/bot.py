@@ -397,7 +397,7 @@ class PoGoBot(object):
         lat, lng, alt = self.api.get_position()
         path_resets = 0
         for pid, pokestop in self.pois["pokestops"].iteritems():
-            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004455:
+            if get_distance((pokestop['latitude'], pokestop['longitude']), (lat, lng)) < 0.0004445:
                 if not pid in self.visited and not "cooldown_complete_timestamp_ms" in pokestop:
                     s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                     time.sleep(delay)
@@ -525,7 +525,7 @@ class PoGoBot(object):
                     if not self.catch_pokemon(pokemon, "lure", self.balls, delay, pid):
                         break
                 if ret["responses"]["DISK_ENCOUNTER"]["result"] == 2:
-                    self.disk_encounters[pid] = pokemon
+                    self.lure_encounters[pid] = pokemon
                 else:
                     print(ret)
 
