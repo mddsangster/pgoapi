@@ -292,7 +292,7 @@ class PoGoBot(object):
     def get_pois(self, delay):
         sys.stdout.write("Getting POIs...\n")
         lat, lng, alt = self.api.get_position()
-        level = 17#random.randint(15,17)
+        level = 15#random.randint(15,17)
         if not level in self.scan_stats:
             self.scan_stats[level] = {"wild_pokemons": 0}
         cell_ids = self.get_cell_ids(lat, lng, level=level, radius=self.config["radius"])
@@ -402,12 +402,17 @@ class PoGoBot(object):
                     time.sleep(delay)
                     if s == -1:
                         sys.stdout.write("  Softban detected, attempting 40 spin fix.\n")
-                        for i in xrange(40):
-                            sys.stdout.write("    Spin %d...\n" % (i+1))
+                        sys.stdout.write("    Spin ")
+                        spins = 40
+                        for i in xrange(spins):
+                            sys.stdout.write("%d" % (i+1))
                             s = self.spin_pokestop(pokestop, lat, lng, alt, delay)
                             time.sleep(delay)
                             if s == 1:
                                 break
+                            if i < spins-1:
+                                sys.stdout.write(",")
+                        sys.stdout.write("\n")
 
     def clean_encounter(self, kind, upid):
         if kind == "incense" and upid in self.incense_encounters.keys():

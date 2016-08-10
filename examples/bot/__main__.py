@@ -31,8 +31,9 @@ def init_config():
     parser.add_argument("-a", "--auth_service", help="Auth Service ('ptc' or 'google')", required=required("auth_service"))
     parser.add_argument("-u", "--username", help="Username", required=required("username"))
     parser.add_argument("-p", "--password", help="Password")
-    parser.add_argument("-l", "--location", help="Location", required=required("location"))
+    parser.add_argument("-l", "--location", help="Location")
     parser.add_argument("-k", "--key", help="Google Maps API Key", required=required("key"))
+    parser.add_argument("-c", "--coords", type=str, help="External bounds and location coordinate overide file")
     parser.add_argument("-v", "--revisit", type=float, help="Revisit timeout for TPS algo", required=required("revisit"))
     parser.add_argument("-m", "--minpokemon", type=int, help="Minimum number of pokemon for auto transfing", required=required("minpokemon"))
     parser.add_argument("-s", "--speed", type=float, help="Travel speed in miles per hour", required=required("speed"))
@@ -45,10 +46,32 @@ def init_config():
     parser.set_defaults(DEBUG=False, nospin=False, nocatch=False, best_balls_first=False)
     args = parser.parse_args()
 
+    if "coords" in args.__dict__ and args.__dict__["coords"] != None:
+        if args.__dict__["coords"].endswith(".json"):
+            f = args.__dict__["coords"]
+        else:
+            f = os.path.join(os.path.dirname(os.path.realpath(__file__)), "coords/%s.json" % args.__dict__["coords"])
+        with open(f, "r") as coordsf:
+            coords = json.load(coordsf)
+            clean_coords = {}
+            if "bounds" in coords:
+                clean_coords["bounds"] = coords["bounds"]
+            elif "bounds" in config:
+                del config["bounds"]
+            if "location" in coords:
+                clean_coords["location"] = coords["location"]
+            elif "location" in config:
+                del config["location"]
+            config.update(clean_coords)
+
     # Passed in arguments shoud trump
     for key in args.__dict__:
-        if args.__dict__[key] != None:
+        if args.__dict__[key] != None and key != "coords":
             config[key] = args.__dict__[key]
+
+    if not "location" in config:
+        sys.stderr.write("Must provide a location!\n")
+        return None
 
     if config["auth_service"] not in ['ptc', 'google']:
         sys.stderr.write("Invalid Auth service specified! ('ptc' or 'google')\n")
@@ -60,7 +83,6 @@ if __name__ == '__main__':
 
     config = init_config()
     if not config:
-        print("shit")
         sys.exit(1)
 
     if type(config["location"]) == str:
