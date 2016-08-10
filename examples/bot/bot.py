@@ -572,9 +572,9 @@ class PoGoBot(object):
                 for i in xrange(min(len(tour),5)):
                     if 'active_fort_modifier' in self.pois["pokestops"][fids[tour[i]]]:
                         lures.append(i)
-                i = min(lures or 0)
-                if len(lures) > 0 and i > 0:
+                if len(lures) > 0 and min(lures) > 0:
                     sys.stdout.write("    Prioritizing pokestop with lure...\n")
+                    i = min(lures)
                 else:
                     i = np.random.poisson(self.config["noise"],1)[0]
                 self.target = fids[tour[i]]
